@@ -61,12 +61,12 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px; /* Расстояние между лого и текстом */
+            gap: 10px; 
             margin-bottom: 20px;
         }
         
         .app-logo {
-            width: 32px; /* Размер логотипа */
+            width: 32px; 
             height: 32px;
             object-fit: contain;
         }
@@ -117,9 +117,10 @@
         .controls { text-align: center; margin-top: 20px; }
 
         /* --- SPECIFIC MODULES --- */
-        #code-container { background: var(--light); border-radius: 12px; padding: 15px; margin: 15px 0; text-align: center; border: 1px dashed var(--border); }
-        #datamatrix-container { width: 200px; height: 200px; display: flex; align-items: center; justify-content: center; margin: 0 auto; background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        #datamatrix-container canvas { width: 180px !important; height: 180px !important; }
+        #code-container { background: var(--light); border-radius: 12px; padding: 15px; text-align: center; border: 1px dashed var(--border); flex: 1; max-width: 250px; }
+        #datamatrix-container { width: 100%; height: auto; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; margin: 0 auto; background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        #datamatrix-container canvas { width: 90% !important; height: 90% !important; object-fit: contain; }
+        
         .mode-badge { display: inline-block; padding: 6px 12px; border-radius: 12px; font-size: 0.75em; font-weight: 600; margin-bottom: 12px; }
         .mode-badge.default { display: none; }
         .mode-badge.list { background: #fef3c7; color: #92400e; }
@@ -211,6 +212,39 @@
         .backup-section { background: #f3f4f6; border: 1px dashed #9ca3af; border-radius: 12px; padding: 15px; margin-top: 25px; text-align: center; }
         .backup-title { font-size: 0.9em; font-weight: 700; color: #4b5563; margin-bottom: 10px; }
         .backup-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        
+        /* --- NEW DM VISUAL LAYOUT --- */
+        .dm-visual-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin: 15px 0;
+            position: relative;
+        }
+
+        .dm-nav-arrow {
+            background: transparent;
+            border: 2px solid transparent;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            font-size: 1.5em;
+            color: var(--primary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .dm-nav-arrow:active {
+            background: #e0f2fe;
+            transform: scale(0.95);
+        }
+
+        .dm-carousel-controls { margin-top: 15px; text-align: center; }
+        .dm-play-controls { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
 
         .d-none { display: none !important; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
@@ -237,23 +271,37 @@
             
             <div id="tab-datamatrix" class="tab-content active">
                 <div id="mode-indicator"><span class="mode-badge default" id="mode-badge">📦 Демо-режим</span></div>
-                <div id="code-container"><div id="datamatrix-container"></div></div>
+                
+                <div class="dm-visual-row">
+                    <button id="dm-prev-btn" class="dm-nav-arrow" style="display:none">❮</button>
+                    <div id="code-container"><div id="datamatrix-container"></div></div>
+                    <button id="dm-next-btn" class="dm-nav-arrow" style="display:none">❯</button>
+                </div>
+
                 <div class="code-info" id="code-info" style="display:none;">
                     <div><span class="label">GTIN:</span> <span class="value" id="info-barcode">-</span></div>
                     <div><span class="label">Шаблон:</span> <span class="value" id="info-template">-</span></div>
                     <div class="counter" id="info-counter">1 / 1</div>
                 </div>
                 <div id="current-code">-</div>
-                <div class="interval-selector">
-                    <label style="width:100%; text-align:center; color:#666; font-size:0.8em; margin-bottom:5px;">⏱️ Интервал (сек):</label>
-                    <button class="interval-btn" data-interval="0.5">0.5</button>
-                    <button class="interval-btn active" data-interval="0.7">0.7</button>
-                    <button class="interval-btn" data-interval="1">1</button>
-                    <button class="interval-btn" data-interval="2">2</button>
-                    <input type="number" id="dm-custom-interval" class="custom-interval-input" placeholder="..." step="0.1" min="0.1" value="0.7">
+                
+                <div class="dm-carousel-controls">
+                    <div class="interval-selector" style="margin: 0 auto 10px auto;">
+                        <button class="interval-btn" data-interval="0.5">0.5</button>
+                        <button class="interval-btn active" data-interval="0.7">0.7</button>
+                        <button class="interval-btn" data-interval="1">1</button>
+                        <button class="interval-btn" data-interval="2">2</button>
+                        <input type="number" id="dm-custom-interval" class="custom-interval-input" placeholder="..." step="0.1" min="0.1" value="0.7">
+                    </div>
+                    <div id="timer" style="text-align: center; margin: 10px 0;">
+                        ⏱️ <span class="pulse" id="countdown">Обновление...</span>
+                    </div>
+                    <div class="dm-play-controls">
+                        <button class="btn btn-warning btn-sm" id="dm-pause-btn">⏸ Стоп</button>
+                        <button class="btn btn-success btn-sm" id="dm-play-btn" style="display:none">▶ Старт</button>
+                        <button class="btn btn-primary btn-sm" id="refresh-btn">✨ Обновить</button>
+                    </div>
                 </div>
-                <div id="timer" style="text-align: center; margin: 10px 0;">⏱️ <span class="pulse" id="countdown">Обновление...</span></div>
-                <div class="controls"><button class="btn btn-primary" id="refresh-btn">✨ Новый код</button></div>
             </div>
             
             <div id="tab-library" class="tab-content">
@@ -695,9 +743,73 @@
             else { badge.textContent = '📦 Демо-режим'; badge.className = 'mode-badge default'; badge.style.display = 'none'; }
         }
         
-        function startTimer() { stopTimer(); state.remaining = state.timerValue; updateCountdown(); state.timerInterval = setInterval(function() { state.remaining -= 0.1; if (state.remaining <= 0.05) { generateAndDisplay(); state.remaining = state.timerValue; } updateCountdown(); }, 100); }
-        function stopTimer() { if (state.timerInterval) { clearInterval(state.timerInterval); state.timerInterval = null; } }
-        function updateCountdown() { var el = document.getElementById('countdown'); if (el) el.textContent = 'Обновление через ' + (state.remaining > 0 ? state.remaining : 0).toFixed(1) + ' сек'; }
+        // --- CORE TIMER LOGIC ---
+        function startTimer() { 
+            stopTimer(); 
+            state.remaining = state.timerValue; 
+            updateCountdown(); 
+            toggleDmPlayState(true); // Update UI to Play State
+            state.timerInterval = setInterval(function() { 
+                state.remaining -= 0.1; 
+                if (state.remaining <= 0.05) { 
+                    generateAndDisplay(); 
+                    state.remaining = state.timerValue; 
+                } 
+                updateCountdown(); 
+            }, 100); 
+        }
+
+        function stopTimer() { 
+            if (state.timerInterval) { 
+                clearInterval(state.timerInterval); 
+                state.timerInterval = null; 
+            }
+            toggleDmPlayState(false); // Update UI to Pause State
+        }
+
+        function updateCountdown() { 
+            var el = document.getElementById('countdown'); 
+            if (el) el.textContent = 'Обновление через ' + (state.remaining > 0 ? state.remaining : 0).toFixed(1) + ' сек'; 
+        }
+
+        // --- NEW MANUAL DM NAVIGATION ---
+        function toggleDmPlayState(isPlaying) {
+            var playBtn = document.getElementById('dm-play-btn');
+            var pauseBtn = document.getElementById('dm-pause-btn');
+            var prevBtn = document.getElementById('dm-prev-btn');
+            var nextBtn = document.getElementById('dm-next-btn');
+            var timerEl = document.getElementById('timer');
+
+            if (isPlaying) {
+                if(playBtn) playBtn.style.display = 'none';
+                if(pauseBtn) pauseBtn.style.display = 'inline-flex';
+                // Hide side arrows
+                if(prevBtn) prevBtn.style.display = 'none';
+                if(nextBtn) nextBtn.style.display = 'none';
+                if(timerEl) timerEl.style.opacity = '1';
+            } else {
+                if(playBtn) playBtn.style.display = 'inline-flex';
+                if(pauseBtn) pauseBtn.style.display = 'none';
+                // Show side arrows
+                if(prevBtn) prevBtn.style.display = 'flex';
+                if(nextBtn) nextBtn.style.display = 'flex';
+                if(timerEl) timerEl.style.opacity = '0.5';
+            }
+        }
+
+        function dmManualNext() {
+            generateAndDisplay();
+        }
+
+        function dmManualPrev() {
+            if (state.isRotating && state.rotationList.length > 0) {
+                var len = state.rotationList.length;
+                state.rotationIndex = (state.rotationIndex - 2 + len) % len;
+                generateAndDisplay();
+            } else {
+                generateAndDisplay(); 
+            }
+        }
         
         function updateSelectedCount() { var count = state.savedItems.filter(function(x) { return x.active; }).length; var el = document.getElementById('selected-count'); if (el) el.textContent = count; }
         
@@ -1267,6 +1379,22 @@
             
             document.getElementById('exportDataBtn').onclick = exportData;
             document.getElementById('importFile').onchange = importData;
+            
+            // New DM Controls Listeners
+            document.getElementById('dm-pause-btn').onclick = stopTimer;
+            document.getElementById('dm-play-btn').onclick = startTimer;
+            document.getElementById('dm-next-btn').onclick = dmManualNext;
+            document.getElementById('dm-prev-btn').onclick = dmManualPrev;
+
+            // KEYBOARD EVENT LISTENER
+            document.addEventListener('keydown', function(e) {
+                var dmTab = document.getElementById('tab-datamatrix');
+                // Only if DM tab is active and Timer is STOPPED (state.timerInterval is null)
+                if (dmTab && dmTab.classList.contains('active') && !state.timerInterval) {
+                    if (e.key === 'ArrowLeft') dmManualPrev();
+                    if (e.key === 'ArrowRight') dmManualNext();
+                }
+            });
 
             document.addEventListener('visibilitychange', function() { if (document.hidden) { stopTimer(); stopWCTimer(); } else { var dmTab = document.getElementById('tab-datamatrix'); if (dmTab && dmTab.classList.contains('active')) { generateAndDisplay(); startTimer(); } if (state.wcIsRotating) { displayWCBarcode(); startWCTimer(); } } });
             renderSavedList(); renderBarcodeFields(); renderFolderList(); renderWeightCarouselList(); updateCurrentFolderName(); toggleWeightMode(); toggleDiscountVisibility(); renderSGFolders();
