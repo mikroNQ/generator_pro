@@ -94,7 +94,7 @@ var Generators = {
         else { code = '22' + Utils.padZeros(plu, 5) + Utils.padZeros(weight, 5); ctrl = Utils.calcControlEAN13(code).toString(); fmt = 'EAN13'; }
         return { code: code + ctrl, format: fmt, weight: weight, plu: plu, prefix: prefix, discount: disc };
     },
-    renderBarcode: function(svg, code, fmt) { if (!svg) return; svg.innerHTML = ''; try { JsBarcode(svg, code, { format: fmt || 'CODE128', height: 70, displayValue: true, fontSize: 14, margin: 10 }); } catch (e) { try { JsBarcode(svg, code, { format: 'CODE128', height: 70, displayValue: true }); } catch(err) {} } },
+    renderBarcode: function(svg, code, fmt) { if (!svg) return; svg.innerHTML = ''; try { JsBarcode(svg, code, { format: fmt || 'CODE128', height: 70, displayValue: true, fontSize: 14, margin: 10, width: 2 }); } catch (e) { try { JsBarcode(svg, code, { format: 'CODE128', height: 70, displayValue: true, width: 2 }); } catch(err) {} } },
     generateSimple: function(v, t) { var code = v.trim(); if (t === 'EAN13' && code.length === 12 && /^\d+$/.test(code)) code += Utils.calcControlEAN13(code); return { code: code, format: t }; }
 };
 
@@ -340,6 +340,19 @@ var Controllers = {
         deleteItem: function() { var f = AppState.getSgFolder(); if (f && f.items.length > 0 && confirm('Удалить?')) { f.items.splice(AppState.sg.carouselIndex, 1); if (AppState.sg.carouselIndex >= f.items.length) AppState.sg.carouselIndex = Math.max(0, f.items.length - 1); Storage.save(); UI.renderSgCarousel(); } },
         deleteFolder: function() { if (confirm('Удалить папку?')) { AppState.sg.folders = AppState.sg.folders.filter(function(f) { return f.id !== AppState.sg.selectedFolderId; }); Storage.save(); this.closeFolder(); } },
         renameFolder: function() { var f = AppState.getSgFolder(); if (f) { var n = prompt('Имя:', f.name); if (n && n.trim()) { f.name = n.trim(); Storage.save(); document.getElementById('sgActiveFolderName').textContent = f.name; } } },
+        // FIX: Новая функция редактирования названия баркода
+        renameItem: function() {
+            var f = AppState.getSgFolder();
+            if (f && f.items.length > 0) {
+                var item = f.items[AppState.sg.carouselIndex];
+                var newName = prompt('Новое название:', item.name);
+                if (newName !== null && newName.trim()) {
+                    item.name = newName.trim();
+                    Storage.save();
+                    UI.renderSgCarousel();
+                }
+            }
+        },
         toggleFolderMode: function(force) { var sel = document.getElementById('sgFolderSelect'), inp = document.getElementById('sgFolderInput'), btn = document.getElementById('sgFolderModeBtn'); var isNew = force !== undefined ? force : !AppState.sg.isNewFolderMode; AppState.sg.isNewFolderMode = isNew; if (isNew) { sel.classList.add('d-none'); inp.classList.remove('d-none'); inp.focus(); btn.textContent = '☰'; btn.classList.remove('btn-purple'); btn.classList.add('btn-secondary'); } else { sel.classList.remove('d-none'); inp.classList.add('d-none'); btn.textContent = '＋'; btn.classList.remove('btn-secondary'); btn.classList.add('btn-purple'); } },
         save: function() {
             var val = document.getElementById('sgValue').value.trim(), type = document.getElementById('sgType').value, name = document.getElementById('sgName').value.trim() || 'Без названия';
@@ -429,6 +442,8 @@ function init() {
     document.getElementById('sgRenameFolderBtn').onclick = function() { Controllers.SG.renameFolder(); };
     document.getElementById('sgDeleteFolderBtn').onclick = function() { Controllers.SG.deleteFolder(); };
     document.getElementById('sgDeleteItemBtn').onclick = function() { Controllers.SG.deleteItem(); };
+    // FIX: Обработчик для редактирования названия баркода
+    document.getElementById('sgEditNameBtn').onclick = function() { Controllers.SG.renameItem(); };
     document.getElementById('wcAddToCarousel').onclick = function() { Controllers.WC.addItems(); };
     document.getElementById('wc-select-all').onclick = function() { Controllers.WC.selectAll(); };
     document.getElementById('wc-deselect-all').onclick = function() { Controllers.WC.deselectAll(); };
@@ -447,7 +462,7 @@ function init() {
     document.onvisibilitychange = function() { if (document.hidden) { Controllers.DM.stopTimer(); Controllers.WC.stopTimer(); } else { if (Controllers.Tab.current === 'datamatrix') { Controllers.DM.generateAndDisplay(); Controllers.DM.startTimer(); } if (AppState.wc.isRotating) { Controllers.WC.displayBarcode(); Controllers.WC.startTimer(); } } };
     UI.renderSavedList(); UI.renderBarcodeFields(); UI.renderWcFolders(); UI.renderWcItems(); UI.renderSgFolders(); UI.renderHistory();
     setTimeout(function() { Controllers.DM.generateAndDisplay(); Controllers.DM.startTimer(); }, 300);
-    console.log('[Generator v2.1] Ready');
+    console.log('[Generator v2.2] Ready');
 }
 
 if (document.readyState === 'complete' || document.readyState === 'interactive') setTimeout(init, 50);
