@@ -311,6 +311,8 @@ var Controllers = {
             setTimeout(function() { Utils.scrollToElement(document.getElementById('wcCarouselDisplay'), 100); }, 100);
         },
         stopRotation: function() { AppState.wc.isRotating = false; this.stopTimer(); document.getElementById('wc-start-btn').style.display = 'inline-flex'; document.getElementById('wc-stop-btn').style.display = 'none'; document.getElementById('wcCarouselDisplay').style.display = 'none'; UI.updateWcStatus(); },
+        manualNext: function() { if (AppState.wc.isRotating && AppState.wc.rotationItems.length > 0) { this.displayBarcode(); } },
+        manualPrev: function() { if (AppState.wc.isRotating && AppState.wc.rotationItems.length > 0) { var l = AppState.wc.rotationItems.length; AppState.wc.rotationIndex = (AppState.wc.rotationIndex - 2 + l) % l; this.displayBarcode(); } },
         
         // FIX: Обновлённая функция displayBarcode с резкой вспышкой для сканера
         displayBarcode: function() {
@@ -370,6 +372,19 @@ var Controllers = {
                 var newName = prompt('Новое название:', item.name);
                 if (newName !== null && newName.trim()) {
                     item.name = newName.trim();
+                    Storage.save();
+                    UI.renderSgCarousel();
+                }
+            }
+        },
+        editItemCode: function() {
+            var f = AppState.getSgFolder();
+            if (f && f.items.length > 0) {
+                var item = f.items[AppState.sg.carouselIndex];
+                var newCode = prompt('Новый код:', item.code);
+                if (newCode !== null && newCode.trim()) {
+                    var result = Generators.generateSimple(newCode.trim(), item.type);
+                    item.code = result.code;
                     Storage.save();
                     UI.renderSgCarousel();
                 }
@@ -465,6 +480,7 @@ function init() {
     document.getElementById('sgDeleteFolderBtn').onclick = function() { Controllers.SG.deleteFolder(); };
     document.getElementById('sgDeleteItemBtn').onclick = function() { Controllers.SG.deleteItem(); };
     document.getElementById('sgEditNameBtn').onclick = function() { Controllers.SG.renameItem(); };
+    document.getElementById('sgEditCodeBtn').onclick = function() { Controllers.SG.editItemCode(); };
     document.getElementById('wcAddToCarousel').onclick = function() { Controllers.WC.addItems(); };
     document.getElementById('wc-select-all').onclick = function() { Controllers.WC.selectAll(); };
     document.getElementById('wc-deselect-all').onclick = function() { Controllers.WC.deselectAll(); };
@@ -474,12 +490,25 @@ function init() {
     document.getElementById('wc-run-folder').onclick = function() { if (AppState.getWcFolder()) Controllers.WC.startRotation(); else alert('Выберите папку'); };
     document.getElementById('wc-rename-folder').onclick = function() { Controllers.WC.renameFolder(); };
     document.getElementById('wc-delete-folder').onclick = function() { Controllers.WC.deleteFolder(); };
+    document.getElementById('wcPrevBtn').onclick = function() { Controllers.WC.manualPrev(); };
+    document.getElementById('wcNextBtn').onclick = function() { Controllers.WC.manualNext(); };
     document.querySelectorAll('.wc-interval-btn').forEach(function(btn) { btn.onclick = function() { document.getElementById('wc-custom-interval').value = btn.dataset.interval; Controllers.WC.setInterval(parseFloat(btn.dataset.interval)); document.querySelectorAll('.wc-interval-btn').forEach(function(b) { b.classList.remove('active'); }); btn.classList.add('active'); }; });
     document.getElementById('wc-custom-interval').onchange = function(e) { Controllers.WC.setInterval(parseFloat(e.target.value)); };
     document.querySelectorAll('input[name="weightMode"]').forEach(function(r) { r.onchange = function() { var m = document.querySelector('input[name="weightMode"]:checked'); var mode = m ? m.value : 'random'; document.getElementById('group-random-weight').classList.toggle('d-none', mode === 'fixed'); document.getElementById('group-fixed-weight').classList.toggle('d-none', mode !== 'fixed'); document.getElementById('wcVariationsLabel').textContent = mode === 'fixed' ? 'Повторов' : 'Вариаций'; document.getElementById('wcVariationsHint').textContent = mode === 'fixed' ? 'Повторов на PLU' : 'Весов на PLU'; }; });
     document.querySelectorAll('input[name="discountMode"]').forEach(function(r) { r.onchange = function() { var m = document.querySelector('input[name="discountMode"]:checked'); var mode = m ? m.value : 'fixed'; document.getElementById('disc-fixed-group').classList.toggle('d-none', mode !== 'fixed'); document.getElementById('disc-random-group').classList.toggle('d-none', mode === 'fixed'); }; });
     document.getElementById('wcPrefix49').onchange = function() { document.getElementById('group-discount-section').classList.toggle('d-none', !document.getElementById('wcPrefix49').checked); };
-    document.onkeydown = function(e) { var dm = document.getElementById('tab-datamatrix'); if (dm && dm.classList.contains('active') && !AppState.dm.timerInterval) { if (e.key === 'ArrowLeft') Controllers.DM.manualPrev(); if (e.key === 'ArrowRight') Controllers.DM.manualNext(); } };
+    document.onkeydown = function(e) {
+        var dm = document.getElementById('tab-datamatrix');
+        if (dm && dm.classList.contains('active') && !AppState.dm.timerInterval) {
+            if (e.key === 'ArrowLeft') Controllers.DM.manualPrev();
+            if (e.key === 'ArrowRight') Controllers.DM.manualNext();
+        }
+        var wc = document.getElementById('tab-weightcarousel');
+        if (wc && wc.classList.contains('active') && AppState.wc.isRotating) {
+            if (e.key === 'ArrowLeft') Controllers.WC.manualPrev();
+            if (e.key === 'ArrowRight') Controllers.WC.manualNext();
+        }
+    };
     document.onvisibilitychange = function() { if (document.hidden) { Controllers.DM.stopTimer(); Controllers.WC.stopTimer(); } else { if (Controllers.Tab.current === 'datamatrix') { Controllers.DM.generateAndDisplay(); Controllers.DM.startTimer(); } if (AppState.wc.isRotating) { Controllers.WC.displayBarcode(); Controllers.WC.startTimer(); } } };
     UI.renderSavedList(); UI.renderBarcodeFields(); UI.renderWcFolders(); UI.renderWcItems(); UI.renderSgFolders(); UI.renderHistory();
     setTimeout(function() { Controllers.DM.generateAndDisplay(); Controllers.DM.startTimer(); }, 300);
