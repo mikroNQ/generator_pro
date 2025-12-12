@@ -2,13 +2,19 @@
 'use strict';
 
 var AppState = {
-    STORAGE_KEY: 'barcode_gen_v4',
-    dm: { timerValue: 0.7, remaining: 0.7, timerInterval: null, isRotating: false, rotationList: [], rotationIndex: 0, selectedTemplate: 'type1', generatedCodes: [], codeHistoryIndex: -1 },
+    STORAGE_KEY: 'barcode_gen_v5',
+    dm: { timerValue: 0.7, remaining: 0.7, timerInterval: null, isRotating: false, rotationList: [], rotationIndex: 0, selectedTemplate: 'type1', generatedCodes: [], codeHistoryIndex: -1, folders: [], selectedFolderId: null, isNewFolderMode: false },
     savedItems: [],
     wc: { folders: [], selectedFolderId: null, timerValue: 0.7, remaining: 0.7, timerInterval: null, isRotating: false, rotationIndex: 0, rotationItems: [] },
     sg: { folders: [], selectedFolderId: null, carouselIndex: 0, isNewFolderMode: false },
     history: { items: [], maxItems: 50 },
-    
+
+    getDmFolder: function(id) {
+        var fid = id || this.dm.selectedFolderId;
+        for (var i = 0; i < this.dm.folders.length; i++) if (this.dm.folders[i].id === fid) return this.dm.folders[i];
+        return null;
+    },
+    getDmFolderItems: function() { var f = this.getDmFolder(); return f ? f.items : []; },
     getWcFolder: function(id) {
         var fid = id || this.wc.selectedFolderId;
         for (var i = 0; i < this.wc.folders.length; i++) if (this.wc.folders[i].id === fid) return this.wc.folders[i];
@@ -32,21 +38,27 @@ var Storage = {
     load: function() {
         try {
             var data = localStorage.getItem(AppState.STORAGE_KEY);
-            if (data) { var p = JSON.parse(data); AppState.savedItems = p.savedItems || []; AppState.wc.folders = p.wcFolders || []; AppState.sg.folders = p.sgFolders || []; AppState.history.items = p.history || []; }
+            if (data) { var p = JSON.parse(data); AppState.savedItems = p.savedItems || []; AppState.dm.folders = p.dmFolders || []; AppState.wc.folders = p.wcFolders || []; AppState.sg.folders = p.sgFolders || []; AppState.history.items = p.history || []; }
+            // Миграция старых данных в папку "Без папки"
+            if (AppState.savedItems.length > 0 && AppState.dm.folders.length === 0) {
+                AppState.dm.folders.push({ id: 'dmf_legacy', name: 'Импортированные', items: AppState.savedItems.slice() });
+                AppState.savedItems = [];
+                this.save();
+            }
         } catch (e) { console.error('Load error:', e); }
     },
     save: function() {
-        try { localStorage.setItem(AppState.STORAGE_KEY, JSON.stringify({ savedItems: AppState.savedItems, wcFolders: AppState.wc.folders, sgFolders: AppState.sg.folders, history: AppState.history.items })); }
+        try { localStorage.setItem(AppState.STORAGE_KEY, JSON.stringify({ savedItems: AppState.savedItems, dmFolders: AppState.dm.folders, wcFolders: AppState.wc.folders, sgFolders: AppState.sg.folders, history: AppState.history.items })); }
         catch (e) { console.error('Save error:', e); }
     },
     exportData: function() {
-        var blob = new Blob([JSON.stringify({ savedItems: AppState.savedItems, wcFolders: AppState.wc.folders, sgFolders: AppState.sg.folders, history: AppState.history.items }, null, 2)], {type: 'application/json'});
+        var blob = new Blob([JSON.stringify({ savedItems: AppState.savedItems, dmFolders: AppState.dm.folders, wcFolders: AppState.wc.folders, sgFolders: AppState.sg.folders, history: AppState.history.items }, null, 2)], {type: 'application/json'});
         var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup_' + new Date().toISOString().slice(0,10) + '.json'; a.click();
     },
     importData: function(file) {
         var reader = new FileReader();
         reader.onload = function(e) {
-            try { var d = JSON.parse(e.target.result); if (confirm('Заменить данные?')) { AppState.savedItems = d.savedItems || []; AppState.wc.folders = d.wcFolders || []; AppState.sg.folders = d.sgFolders || []; AppState.history.items = d.history || []; Storage.save(); location.reload(); } }
+            try { var d = JSON.parse(e.target.result); if (confirm('Заменить данные?')) { AppState.savedItems = d.savedItems || []; AppState.dm.folders = d.dmFolders || []; AppState.wc.folders = d.wcFolders || []; AppState.sg.folders = d.sgFolders || []; AppState.history.items = d.history || []; Storage.save(); location.reload(); } }
             catch (err) { alert('Ошибка файла'); }
         }; reader.readAsText(file);
     }
@@ -85,7 +97,7 @@ var Generators = {
         code128_16_cas: { prefix: "77", fields: [{ name: "productCode", label: "Код товара (6)", length: 6 }, { name: "weight", label: "Вес (7)", length: 7 }], format: 'CODE128', fixedControl: '0' },
         ean13_weight: { prefix: "22", fields: [{ name: "productCode", label: "Код товара (5)", length: 5 }, { name: "weight", label: "Вес (5)", length: 5 }], format: 'EAN13' }
     },
-    generateDM: function(b, t) { var tmpl = this.templates[t || AppState.dm.selectedTemplate], code = tmpl.generate(b || '0' + Utils.randomDigits(13)); AppState.addToHistory({ type: 'DM', code: code.substring(0, 30) + '...' }); return { code: code, templateName: tmpl.name }; },
+    generateDM: function(b, t) { var tmpl = this.templates[t || AppState.dm.selectedTemplate], code = tmpl.generate(b || '0' + Utils.randomDigits(13)); AppState.addToHistory({ type: 'DM', code: code }); return { code: code, templateName: tmpl.name }; },
     renderDM: function(c, code) { if (!c) return; c.innerHTML = ''; try { var canvas = document.createElement('canvas'); bwipjs.toCanvas(canvas, { bcid: 'datamatrix', text: code, scale: 4, padding: 2 }); c.appendChild(canvas); } catch (e) { c.innerHTML = '<div style="color:red">Ошибка</div>'; } },
     generateWeightBarcode: function(prefix, plu, weight, disc) {
         var code, ctrl, fmt;
@@ -99,28 +111,56 @@ var Generators = {
 };
 
 var UI = {
-    renderSavedList: function() {
-        var c = document.getElementById('saved-list'); if (!c) return;
-        if (AppState.savedItems.length === 0) { c.innerHTML = '<div class="empty-state">Нет сохранённых GTIN</div>'; }
+    renderDmFolders: function() {
+        var c = document.getElementById('dmFolderList'); if (!c) return;
+        if (AppState.dm.folders.length === 0) { c.innerHTML = '<div class="empty-state">Нет папок</div>'; }
         else {
             var f = document.createDocumentFragment();
-            AppState.savedItems.forEach(function(item) {
-                var d = document.createElement('div'); d.className = 'saved-item' + (item.active ? ' active' : '');
-                var tmpl = Generators.templates[item.template] || Generators.templates.type1;
-                d.innerHTML = '<div class="info"><div class="barcode">' + Utils.escapeHtml(item.barcode) + '</div><div style="font-size:.8em;color:#666">' + tmpl.name + '</div></div><div style="display:flex;gap:8px"><button class="btn btn-sm ' + (item.active ? 'btn-success' : 'btn-outline') + '" data-action="toggle">' + (item.active ? '✓' : '○') + '</button><button class="btn btn-sm btn-danger" data-action="delete">✕</button></div>';
-                d.querySelector('[data-action="toggle"]').onclick = function() { item.active = !item.active; Storage.save(); UI.renderSavedList(); };
-                d.querySelector('[data-action="delete"]').onclick = function() { AppState.savedItems = AppState.savedItems.filter(function(x) { return x.id !== item.id; }); Storage.save(); UI.renderSavedList(); };
+            AppState.dm.folders.forEach(function(folder) {
+                var d = document.createElement('div'); d.className = 'folder-item' + (folder.id === AppState.dm.selectedFolderId ? ' selected' : '');
+                var activeCount = folder.items.filter(function(x) { return x.active; }).length;
+                d.innerHTML = '<div>📁</div><div style="flex:1"><b>' + Utils.escapeHtml(folder.name) + '</b><div style="font-size:.8em;color:#666">' + folder.items.length + ' шт' + (activeCount > 0 ? ' (' + activeCount + ' ✓)' : '') + '</div></div>';
+                d.onclick = function() { AppState.dm.selectedFolderId = folder.id; UI.renderDmFolders(); UI.renderDmItems(); };
                 f.appendChild(d);
             });
             c.innerHTML = ''; c.appendChild(f);
         }
-        document.getElementById('selected-count').textContent = AppState.savedItems.filter(function(x) { return x.active; }).length;
+        var nameEl = document.getElementById('dm-current-folder-name'), folder = AppState.getDmFolder();
+        if (nameEl) nameEl.innerHTML = folder ? '<span class="current-folder-badge">📁 ' + Utils.escapeHtml(folder.name) + '</span>' : '';
+        // Обновляем селектор папок
+        var sel = document.getElementById('dmFolderSelect');
+        if (sel) {
+            if (AppState.dm.folders.length === 0) { sel.innerHTML = '<option disabled selected>Нет папок</option>'; }
+            else { sel.innerHTML = AppState.dm.folders.map(function(f) { return '<option value="' + Utils.escapeHtml(f.name) + '">' + Utils.escapeHtml(f.name) + '</option>'; }).join(''); }
+        }
+    },
+    renderDmItems: function() {
+        var c = document.getElementById('dmItemsList'), items = AppState.getDmFolderItems();
+        var countEl = document.getElementById('dm-items-count');
+        if (countEl) countEl.textContent = items.length;
+        if (!c) return;
+        if (items.length === 0) { c.innerHTML = '<div class="empty-state">Выберите папку или добавьте GTIN</div>'; }
+        else {
+            var f = document.createDocumentFragment();
+            items.forEach(function(item) {
+                var d = document.createElement('div'); d.className = 'saved-item' + (item.active ? ' active' : '');
+                var tmpl = Generators.templates[item.template] || Generators.templates.type1;
+                d.innerHTML = '<div class="info"><div class="barcode">' + Utils.escapeHtml(item.barcode) + '</div><div style="font-size:.8em;color:#666">' + tmpl.name + '</div></div><div style="display:flex;gap:8px"><button class="btn btn-sm ' + (item.active ? 'btn-success' : 'btn-outline') + '" data-action="toggle">' + (item.active ? '✓' : '○') + '</button><button class="btn btn-sm btn-danger" data-action="delete">✕</button></div>';
+                d.querySelector('[data-action="toggle"]').onclick = function() { item.active = !item.active; Storage.save(); UI.renderDmItems(); UI.renderDmFolders(); };
+                d.querySelector('[data-action="delete"]').onclick = function() { var fl = AppState.getDmFolder(); if (fl) { fl.items = fl.items.filter(function(x) { return x.id !== item.id; }); Storage.save(); UI.renderDmItems(); UI.renderDmFolders(); } };
+                f.appendChild(d);
+            });
+            c.innerHTML = ''; c.appendChild(f);
+        }
         this.updateRotationStatus();
     },
+    renderSavedList: function() { this.renderDmFolders(); this.renderDmItems(); },
     updateRotationStatus: function() {
-        var el = document.getElementById('rotation-status'), active = AppState.savedItems.filter(function(x) { return x.active; });
-        if (el) el.textContent = AppState.dm.isRotating ? '🔄 Ротация: ' + AppState.dm.rotationList.length : active.length > 0 ? '✓ Выбрано: ' + active.length : 'Выберите GTIN';
+        var el = document.getElementById('rotation-status'), folder = AppState.getDmFolder();
+        var active = folder ? folder.items.filter(function(x) { return x.active; }) : [];
+        if (el) el.textContent = AppState.dm.isRotating ? '🔄 Ротация: ' + AppState.dm.rotationList.length : folder ? '✓ ' + active.length + ' активно' : 'Создайте папку';
         var ctrl = document.getElementById('rotation-controls'); if (ctrl) ctrl.className = 'rotation-controls' + (AppState.dm.isRotating ? ' active' : '');
+        var countEl = document.getElementById('selected-count'); if (countEl) countEl.textContent = active.length;
     },
     renderWcFolders: function() {
         var c = document.getElementById('wcFolderList'); if (!c) return;
@@ -208,7 +248,8 @@ var UI = {
                 var d = document.createElement('div'); 
                 d.className = 'history-item';
                 var time = new Date(item.timestamp).toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
-                d.innerHTML = '<span class="history-time">' + time + '</span><span class="history-type">' + (item.type || '?') + '</span><span class="history-code">' + Utils.escapeHtml(item.code || '-') + '</span>';
+                var displayCode = item.code && item.code.length > 30 ? item.code.substring(0, 30) + '...' : (item.code || '-');
+                d.innerHTML = '<span class="history-time">' + time + '</span><span class="history-type">' + (item.type || '?') + '</span><span class="history-code">' + Utils.escapeHtml(displayCode) + '</span>';
                 d.onclick = function() { 
                     if (navigator.clipboard) navigator.clipboard.writeText(item.code);
                     if (item.type === 'DM') {
@@ -239,13 +280,21 @@ var Controllers = {
             if (dm.isRotating && dm.rotationList.length > 0) {
                 var item = dm.rotationList[dm.rotationIndex]; barcode = item.barcode;
                 result = Generators.generateDM(barcode, item.template);
-                // Сохраняем сгенерированный код в кэш
-                dm.generatedCodes.push({ code: result.code, barcode: barcode, templateName: result.templateName, rotationIdx: dm.rotationIndex });
+                // Сохраняем сгенерированный код в кэш с текущим индексом ротации
+                var currentRotationIdx = dm.rotationIndex;
+                dm.generatedCodes.push({ code: result.code, barcode: barcode, templateName: result.templateName, rotationIdx: currentRotationIdx });
                 dm.codeHistoryIndex = dm.generatedCodes.length - 1;
                 dm.rotationIndex = (dm.rotationIndex + 1) % dm.rotationList.length;
-                this.showCodeInfo(barcode, result.templateName, dm.codeHistoryIndex + 1, dm.generatedCodes.length);
+                this.showCodeInfo(barcode, result.templateName, currentRotationIdx + 1, dm.rotationList.length);
                 this.updateBadge(true, dm.rotationList.length);
-            } else { result = Generators.generateDM(); this.hideCodeInfo(); this.updateBadge(false); }
+            } else {
+                result = Generators.generateDM();
+                // Кэшируем и демо-коды для навигации
+                dm.generatedCodes.push({ code: result.code, barcode: 'demo', templateName: 'Демо' });
+                dm.codeHistoryIndex = dm.generatedCodes.length - 1;
+                this.hideCodeInfo();
+                this.updateBadge(false);
+            }
             Generators.renderDM(document.getElementById('datamatrix-container'), result.code);
             var codeEl = document.getElementById('current-code'); if (codeEl) { codeEl.textContent = result.code; codeEl.classList.add('flash'); setTimeout(function() { codeEl.classList.remove('flash'); }, 300); }
         },
@@ -257,8 +306,11 @@ var Controllers = {
             Generators.renderDM(document.getElementById('datamatrix-container'), cached.code);
             var codeEl = document.getElementById('current-code');
             if (codeEl) { codeEl.textContent = cached.code; codeEl.classList.add('flash'); setTimeout(function() { codeEl.classList.remove('flash'); }, 300); }
-            this.showCodeInfo(cached.barcode, cached.templateName, index + 1, dm.generatedCodes.length);
-            this.updateBadge(true, dm.rotationList.length);
+            // Используем сохранённый rotationIdx и общее количество GTIN
+            var displayIdx = cached.rotationIdx !== undefined ? cached.rotationIdx + 1 : index + 1;
+            var total = dm.rotationList.length > 0 ? dm.rotationList.length : dm.generatedCodes.length;
+            this.showCodeInfo(cached.barcode, cached.templateName, displayIdx, total);
+            this.updateBadge(true, dm.rotationList.length || dm.generatedCodes.length);
         },
         startTimer: function() {
             var self = this, dm = AppState.dm;
@@ -274,7 +326,10 @@ var Controllers = {
         stopTimer: function() { if (AppState.dm.timerInterval) { clearInterval(AppState.dm.timerInterval); AppState.dm.timerInterval = null; } this.togglePlayState(false); },
         setInterval: function(val) { if (isNaN(val) || val <= 0) return; AppState.dm.timerValue = val; AppState.dm.remaining = val; this.startTimer(); },
         startRotation: function() {
-            var active = AppState.savedItems.filter(function(x) { return x.active; }); if (active.length === 0) { alert('Выберите GTIN!'); return; }
+            var folder = AppState.getDmFolder();
+            if (!folder) { alert('Выберите папку!'); return; }
+            var active = folder.items.filter(function(x) { return x.active; });
+            if (active.length === 0) { alert('Выберите GTIN в папке!'); return; }
             AppState.dm.rotationList = active; AppState.dm.rotationIndex = 0; AppState.dm.isRotating = true;
             // Очищаем кэш при новом запуске ротации
             AppState.dm.generatedCodes = []; AppState.dm.codeHistoryIndex = -1;
@@ -291,8 +346,10 @@ var Controllers = {
             var dm = AppState.dm;
             if (dm.generatedCodes.length > 0 && dm.codeHistoryIndex >= 0) {
                 var cached = dm.generatedCodes[dm.codeHistoryIndex];
-                this.showCodeInfo(cached.barcode, cached.templateName, dm.codeHistoryIndex + 1, dm.generatedCodes.length);
-                this.updateBadge(true, dm.generatedCodes.length);
+                var displayIdx = cached.rotationIdx !== undefined ? cached.rotationIdx + 1 : dm.codeHistoryIndex + 1;
+                var total = dm.rotationList.length > 0 ? dm.rotationList.length : dm.generatedCodes.length;
+                this.showCodeInfo(cached.barcode, cached.templateName, displayIdx, total);
+                this.updateBadge(true, total);
             } else {
                 this.hideCodeInfo(); this.updateBadge(false);
             }
@@ -306,13 +363,14 @@ var Controllers = {
                 // Генерируем новый код на основе следующего GTIN
                 var item = dm.rotationList[dm.rotationIndex];
                 var result = Generators.generateDM(item.barcode, item.template);
-                dm.generatedCodes.push({ code: result.code, barcode: item.barcode, templateName: result.templateName });
+                var currentRotationIdx = dm.rotationIndex;
+                dm.generatedCodes.push({ code: result.code, barcode: item.barcode, templateName: result.templateName, rotationIdx: currentRotationIdx });
                 dm.codeHistoryIndex = dm.generatedCodes.length - 1;
                 dm.rotationIndex = (dm.rotationIndex + 1) % dm.rotationList.length;
                 Generators.renderDM(document.getElementById('datamatrix-container'), result.code);
                 var codeEl = document.getElementById('current-code');
                 if (codeEl) { codeEl.textContent = result.code; codeEl.classList.add('flash'); setTimeout(function() { codeEl.classList.remove('flash'); }, 300); }
-                this.showCodeInfo(item.barcode, result.templateName, dm.codeHistoryIndex + 1, dm.generatedCodes.length);
+                this.showCodeInfo(item.barcode, result.templateName, currentRotationIdx + 1, dm.rotationList.length);
                 this.updateBadge(true, dm.rotationList.length);
             } else {
                 // Демо-режим - генерируем случайный код
@@ -324,6 +382,19 @@ var Controllers = {
             // Если есть кэш и мы не в начале - показываем предыдущий из кэша
             if (dm.generatedCodes.length > 0 && dm.codeHistoryIndex > 0) {
                 this.displayFromCache(dm.codeHistoryIndex - 1);
+            } else if (dm.rotationList.length > 0) {
+                // Генерируем код для предыдущего GTIN
+                var prevIdx = (dm.rotationIndex - 2 + dm.rotationList.length) % dm.rotationList.length;
+                var item = dm.rotationList[prevIdx];
+                var result = Generators.generateDM(item.barcode, item.template);
+                // Вставляем в начало кэша с сохранением индекса ротации
+                dm.generatedCodes.unshift({ code: result.code, barcode: item.barcode, templateName: result.templateName, rotationIdx: prevIdx });
+                dm.codeHistoryIndex = 0;
+                Generators.renderDM(document.getElementById('datamatrix-container'), result.code);
+                var codeEl = document.getElementById('current-code');
+                if (codeEl) { codeEl.textContent = result.code; codeEl.classList.add('flash'); setTimeout(function() { codeEl.classList.remove('flash'); }, 300); }
+                this.showCodeInfo(item.barcode, result.templateName, prevIdx + 1, dm.rotationList.length);
+                this.updateBadge(true, dm.rotationList.length);
             }
         },
         updateCountdown: function() { var el = document.getElementById('countdown'); if (el) el.textContent = 'через ' + Math.max(0, AppState.dm.remaining).toFixed(1) + ' сек'; },
@@ -514,7 +585,7 @@ var Controllers = {
             if (this.current === 'datamatrix') Controllers.DM.stopTimer();
             if (this.current === 'weightcarousel' && AppState.wc.isRotating) Controllers.WC.stopRotation();
             if (name === 'datamatrix') { Controllers.DM.generateAndDisplay(); Controllers.DM.startTimer(); }
-            if (name === 'library') { UI.renderSavedList(); UI.renderHistory(); }
+            if (name === 'library') { UI.renderDmFolders(); UI.renderDmItems(); UI.renderHistory(); }
             if (name === 'barcode') UI.renderBarcodeFields();
             if (name === 'weightcarousel') { UI.renderWcFolders(); UI.renderWcItems(); }
             if (name === 'simplegen') { UI.renderSgFolders(); Controllers.SG.closeFolder(); }
@@ -524,10 +595,29 @@ var Controllers = {
     Library: {
         addBarcodes: function() {
             var val = document.getElementById('barcode-input').value; if (!val.trim()) return;
+            var folderName = AppState.dm.isNewFolderMode || AppState.dm.folders.length === 0 ? document.getElementById('dmFolderInput').value.trim() : document.getElementById('dmFolderSelect').value;
+            if (!folderName) { alert('Укажите папку!'); return; }
             var items = val.split('\n').map(function(line, i) { var bc = line.trim().replace(/\D/g, ''); if (bc.length >= 8) return { id: Date.now() + '_' + i, barcode: bc, template: AppState.dm.selectedTemplate, active: true }; return null; }).filter(function(x) { return x; });
-            if (items.length > 0) { AppState.savedItems = AppState.savedItems.concat(items); Storage.save(); UI.renderSavedList(); document.getElementById('barcode-input').value = ''; alert('Добавлено: ' + items.length); }
-            else alert('Нет валидных кодов');
-        }
+            if (items.length === 0) { alert('Нет валидных кодов'); return; }
+            var folder = AppState.dm.folders.find(function(f) { return f.name.toLowerCase() === folderName.toLowerCase(); });
+            if (!folder) { folder = { id: 'dmf_' + Date.now(), name: folderName, items: [] }; AppState.dm.folders.push(folder); }
+            folder.items = folder.items.concat(items); AppState.dm.selectedFolderId = folder.id; Storage.save(); UI.renderDmFolders(); UI.renderDmItems();
+            document.getElementById('barcode-input').value = '';
+            if (AppState.dm.isNewFolderMode) { document.getElementById('dmFolderInput').value = ''; Controllers.Library.toggleFolderMode(false); }
+            alert('Добавлено: ' + items.length);
+        },
+        toggleFolderMode: function(force) {
+            var sel = document.getElementById('dmFolderSelect'), inp = document.getElementById('dmFolderInput'), btn = document.getElementById('dmFolderModeBtn');
+            var isNew = force !== undefined ? force : !AppState.dm.isNewFolderMode;
+            AppState.dm.isNewFolderMode = isNew;
+            if (isNew) { sel.classList.add('d-none'); inp.classList.remove('d-none'); inp.focus(); btn.textContent = '☰'; btn.classList.remove('btn-purple'); btn.classList.add('btn-secondary'); }
+            else { sel.classList.remove('d-none'); inp.classList.add('d-none'); btn.textContent = '＋'; btn.classList.remove('btn-secondary'); btn.classList.add('btn-purple'); }
+        },
+        selectAll: function() { var f = AppState.getDmFolder(); if (f) { f.items.forEach(function(i) { i.active = true; }); Storage.save(); UI.renderDmItems(); UI.renderDmFolders(); } },
+        deselectAll: function() { var f = AppState.getDmFolder(); if (f) { f.items.forEach(function(i) { i.active = false; }); Storage.save(); UI.renderDmItems(); UI.renderDmFolders(); } },
+        clearSelected: function() { var f = AppState.getDmFolder(); if (f && confirm('Удалить выбранные?')) { f.items = f.items.filter(function(x) { return !x.active; }); Storage.save(); UI.renderDmItems(); UI.renderDmFolders(); } },
+        deleteFolder: function() { var f = AppState.getDmFolder(); if (f && confirm('Удалить папку "' + f.name + '"?')) { AppState.dm.folders = AppState.dm.folders.filter(function(x) { return x.id !== f.id; }); AppState.dm.selectedFolderId = null; Storage.save(); UI.renderDmFolders(); UI.renderDmItems(); Controllers.DM.stopRotation(); } },
+        renameFolder: function() { var f = AppState.getDmFolder(); if (f) { var n = prompt('Новое имя папки:', f.name); if (n && n.trim()) { f.name = n.trim(); Storage.save(); UI.renderDmFolders(); } } }
     }
 };
 
@@ -543,9 +633,13 @@ function init() {
     document.getElementById('dm-custom-interval').onchange = function(e) { Controllers.DM.setInterval(parseFloat(e.target.value)); };
     document.getElementById('add-btn').onclick = function() { Controllers.Library.addBarcodes(); };
     document.getElementById('clear-input-btn').onclick = function() { document.getElementById('barcode-input').value = ''; };
-    document.getElementById('select-all-btn').onclick = function() { AppState.savedItems.forEach(function(i) { i.active = true; }); Storage.save(); UI.renderSavedList(); };
-    document.getElementById('deselect-all-btn').onclick = function() { AppState.savedItems.forEach(function(i) { i.active = false; }); Storage.save(); UI.renderSavedList(); };
-    document.getElementById('clear-all-btn').onclick = function() { if (confirm('Удалить всё?')) { AppState.savedItems = []; Storage.save(); UI.renderSavedList(); Controllers.DM.stopRotation(); } };
+    document.getElementById('dmFolderModeBtn').onclick = function() { Controllers.Library.toggleFolderMode(); };
+    document.getElementById('select-all-btn').onclick = function() { Controllers.Library.selectAll(); };
+    document.getElementById('deselect-all-btn').onclick = function() { Controllers.Library.deselectAll(); };
+    document.getElementById('clear-all-btn').onclick = function() { Controllers.Library.clearSelected(); };
+    document.getElementById('dm-run-folder').onclick = function() { if (AppState.getDmFolder()) Controllers.DM.startRotation(); else alert('Выберите папку'); };
+    document.getElementById('dm-rename-folder').onclick = function() { Controllers.Library.renameFolder(); };
+    document.getElementById('dm-delete-folder').onclick = function() { Controllers.Library.deleteFolder(); };
     document.getElementById('start-btn').onclick = function() { Controllers.DM.startRotation(); };
     document.getElementById('stop-btn').onclick = function() { Controllers.DM.stopRotation(); };
     document.querySelectorAll('.tmpl-btn').forEach(function(btn) { btn.onclick = function() { document.querySelectorAll('.tmpl-btn').forEach(function(b) { b.classList.remove('active'); }); btn.classList.add('active'); AppState.dm.selectedTemplate = btn.dataset.template; }; });
@@ -605,9 +699,9 @@ function init() {
         }
     };
     document.onvisibilitychange = function() { if (document.hidden) { Controllers.DM.stopTimer(); Controllers.WC.stopTimer(); } else { if (Controllers.Tab.current === 'datamatrix') { Controllers.DM.generateAndDisplay(); Controllers.DM.startTimer(); } if (AppState.wc.isRotating) { Controllers.WC.displayBarcode(); Controllers.WC.startTimer(); } } };
-    UI.renderSavedList(); UI.renderBarcodeFields(); UI.renderWcFolders(); UI.renderWcItems(); UI.renderSgFolders(); UI.renderHistory();
+    UI.renderDmFolders(); UI.renderDmItems(); UI.renderBarcodeFields(); UI.renderWcFolders(); UI.renderWcItems(); UI.renderSgFolders(); UI.renderHistory();
     setTimeout(function() { Controllers.DM.generateAndDisplay(); Controllers.DM.startTimer(); }, 300);
-    console.log('[Generator v2.3] Ready');
+    console.log('[Generator v2.4] Ready - with DM folders');
 }
 
 if (document.readyState === 'complete' || document.readyState === 'interactive') setTimeout(init, 50);
