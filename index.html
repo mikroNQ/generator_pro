@@ -32,9 +32,10 @@
         h1{color:var(--text-light);font-size:1.5em;margin:0;font-weight:700}
         .version-badge{font-size:.5em;background:var(--primary);color:#fff;padding:2px 6px;border-radius:8px;margin-left:8px;vertical-align:middle}
         .tabs{display:flex;flex-wrap:wrap;background:rgba(255,255,255,0.05);border-radius:16px;padding:5px;margin-bottom:20px;gap:4px;border:1px solid rgba(255,255,255,0.1)}
-        .tab-btn{flex:1 1 auto;padding:10px 6px;border:none;background:transparent;cursor:pointer;font-size:.75em;font-weight:500;color:var(--text-muted);border-radius:12px;white-space:nowrap;transition:all .2s;min-width:0}
+        .tab-btn{flex:1 1 auto;padding:12px 8px;border:none;background:transparent;cursor:pointer;font-size:.85em;font-weight:500;color:var(--text-muted);border-radius:12px;white-space:nowrap;transition:all .2s;min-width:0}
         .tab-btn.active{background:var(--primary);color:#fff;font-weight:600;box-shadow:0 4px 15px rgba(16,185,129,0.3)}
         @media(max-width:500px){.tab-btn{font-size:.75em;padding:10px 6px}}
+        @media(min-width:501px){.tab-btn{font-size:.9em;padding:14px 10px}}
         .tab-content{display:none}
         .tab-content.active{display:block}
         .form-group{margin-bottom:15px}
@@ -103,9 +104,10 @@
         .dm-carousel-nav{
             display:flex;
             justify-content:center;
-            gap:20px;
+            gap:40px;
             margin-top:15px;
         }
+        @media(max-width:500px){.dm-carousel-nav{gap:30px}}
         .dm-arrow-btn{
             background:rgba(16,185,129,0.1);
             border:1px solid rgba(16,185,129,0.3);
@@ -193,7 +195,8 @@
         
         /* Карусель SimpleGen glassmorphism */
         .sg-carousel{background:#fff;border:2px solid var(--primary);border-radius:20px;padding:20px;margin-top:15px;box-shadow:0 4px 20px rgba(0,0,0,0.2)}
-        .sg-carousel-nav{display:flex;justify-content:center;gap:20px;margin-top:12px}
+        .sg-carousel-nav{display:flex;justify-content:center;gap:60px;margin-top:12px}
+        @media(max-width:500px){.sg-carousel-nav{gap:40px}}
         .sg-arrow-btn{
             background:rgba(16,185,129,0.1);
             border:1px solid rgba(16,185,129,0.3);
@@ -229,7 +232,16 @@
             width:auto;
             display:block;
         }
-        .sg-item-name{font-weight:700;color:#333;margin-bottom:8px;font-size:1.2em;word-break:break-word}
+        /* Заголовок с кнопками редактирования */
+        .sg-header-row{
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            gap:8px;
+            margin-bottom:8px;
+            flex-wrap:nowrap;
+        }
+        .sg-item-name{font-weight:700;color:#333;font-size:1.2em;word-break:break-word;margin:0}
         .sg-item-counter{font-size:.85em;color:#888;margin-top:8px}
 
         .sg-back-btn{margin-bottom:15px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;color:var(--primary);font-weight:600;padding:10px}
@@ -392,9 +404,10 @@
         .wc-carousel-nav{
             display:flex;
             justify-content:center;
-            gap:20px;
+            gap:60px;
             margin-top:15px;
         }
+        @media(max-width:500px){.wc-carousel-nav{gap:40px}}
         .wc-arrow-btn{
             background:rgba(16,185,129,0.1);
             border:1px solid rgba(16,185,129,0.3);
@@ -492,8 +505,8 @@
             <div class="template-selector">
                 <label>Шаблон:</label>
                 <div class="template-btns">
-                    <div class="tmpl-btn active" data-template="type1"><span class="tmpl-name">Тип 1</span><span style="font-size:.8em;opacity:.7">Табак/Вода</span></div>
-                    <div class="tmpl-btn" data-template="type2"><span class="tmpl-name">Тип 2</span><span style="font-size:.8em;opacity:.7">Обувь/Одежда</span></div>
+                    <div class="tmpl-btn active" data-template="type1"><span class="tmpl-name">Тип 1</span></div>
+                    <div class="tmpl-btn" data-template="type2"><span class="tmpl-name">Тип 2</span></div>
                 </div>
             </div>
             <div class="form-row">
@@ -583,7 +596,7 @@
             <h3 id="sgActiveFolderName" style="text-align:center;margin:0 0 15px;color:var(--text-light)">Папка</h3>
             <div class="sg-carousel">
                 <div class="sg-display-area">
-                    <div style="display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px">
+                    <div class="sg-header-row">
                         <span class="sg-item-name" id="sgCarouselName">-</span>
                         <button class="sg-edit-name-btn" id="sgEditNameBtn" title="Редактировать название">✎</button>
                         <button class="sg-edit-name-btn" id="sgEditCodeBtn" title="Редактировать код">123</button>
