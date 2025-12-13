@@ -427,6 +427,12 @@ var Controllers = {
             if (dm.generatedCodes.length > 0 && dm.codeHistoryIndex < dm.generatedCodes.length - 1) {
                 this.displayFromCache(dm.codeHistoryIndex + 1);
             } else if (dm.rotationList.length > 0) {
+                // Режим ротации: проверяем, все ли GTIN уже сгенерированы
+                // Если сгенерировано столько же кодов, сколько GTIN в списке - останавливаемся
+                if (dm.generatedCodes.length >= dm.rotationList.length) {
+                    // Уже все GTIN пройдены, не генерируем новые
+                    return;
+                }
                 // Генерируем новый код на основе следующего GTIN из папки
                 var item = dm.rotationList[dm.rotationIndex];
                 var result = Generators.generateDM(item.barcode, item.template);
@@ -440,15 +446,9 @@ var Controllers = {
                 this.showCodeInfo(item.barcode, result.templateName, currentRotationIdx + 1, dm.rotationList.length);
                 this.updateBadge(true, dm.rotationList.length);
             } else {
-                // Демо-режим - генерируем код из списка DEMO_GTINS
-                var result = Generators.generateDM();
-                dm.generatedCodes.push({ code: result.code, barcode: result.barcode, templateName: result.templateName, rotationIdx: dm.generatedCodes.length });
-                dm.codeHistoryIndex = dm.generatedCodes.length - 1;
-                Generators.renderDM(document.getElementById('datamatrix-container'), result.code);
-                var codeEl = document.getElementById('current-code');
-                if (codeEl) { codeEl.textContent = result.code; codeEl.classList.add('flash'); setTimeout(function() { codeEl.classList.remove('flash'); }, 300); }
-                this.showCodeInfo(result.barcode, result.templateName, dm.codeHistoryIndex + 1, DEMO_GTINS.length);
-                this.updateBadge(true, DEMO_GTINS.length);
+                // Демо-режим - не генерируем бесконечно, только листаем кэш
+                // Если кэша нет - ничего не делаем (демо работает только при автоматической ротации)
+                return;
             }
         },
         manualPrev: function() {
@@ -456,20 +456,9 @@ var Controllers = {
             // Если есть кэш и мы не в начале - показываем предыдущий из кэша
             if (dm.generatedCodes.length > 0 && dm.codeHistoryIndex > 0) {
                 this.displayFromCache(dm.codeHistoryIndex - 1);
-            } else if (dm.rotationList.length > 0) {
-                // Генерируем код для предыдущего GTIN
-                var prevIdx = (dm.rotationIndex - 2 + dm.rotationList.length) % dm.rotationList.length;
-                var item = dm.rotationList[prevIdx];
-                var result = Generators.generateDM(item.barcode, item.template);
-                // Вставляем в начало кэша с сохранением индекса ротации
-                dm.generatedCodes.unshift({ code: result.code, barcode: item.barcode, templateName: result.templateName, rotationIdx: prevIdx });
-                dm.codeHistoryIndex = 0;
-                Generators.renderDM(document.getElementById('datamatrix-container'), result.code);
-                var codeEl = document.getElementById('current-code');
-                if (codeEl) { codeEl.textContent = result.code; codeEl.classList.add('flash'); setTimeout(function() { codeEl.classList.remove('flash'); }, 300); }
-                this.showCodeInfo(item.barcode, result.templateName, prevIdx + 1, dm.rotationList.length);
-                this.updateBadge(true, dm.rotationList.length);
             }
+            // Если мы уже на первом элементе (codeHistoryIndex === 0) или кэш пуст - ничего не делаем
+            // Не генерируем новые коды при навигации назад
         },
         updateCountdown: function() { var el = document.getElementById('countdown'); if (el) el.textContent = 'через ' + Math.max(0, AppState.dm.remaining).toFixed(1) + ' сек'; },
         togglePlayState: function(p) {
