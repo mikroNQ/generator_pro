@@ -193,8 +193,14 @@ var Generators = {
     renderGS1QR: function(container, code) {
         if(!container) return;
         container.innerHTML='';
-        try { var canvas=document.createElement('canvas'); bwipjs.toCanvas(canvas,{bcid:'qrcode',text:code,scale:3,eclevel:'M'}); container.appendChild(canvas); }
-        catch(e) { container.innerHTML='<div style="color:red">Ошибка QR</div>'; }
+        try {
+            var canvas = document.createElement('canvas');
+            // bwip-js parse mode: escape literal ^ and encode control chars as ^NNN
+            var t = code.replace(/\^/g,'^^').replace(/[\x00-\x1F\x7F]/g,function(c){return '^'+('00'+c.charCodeAt(0)).slice(-3);});
+            bwipjs.toCanvas(canvas,{bcid:'qrcode',text:t,scale:3,eclevel:'M',parse:true});
+            container.appendChild(canvas);
+        }
+        catch(e) { console.error('[GS1 QR]',e); container.innerHTML='<div style="color:red;font-size:.75em">Ошибка QR</div>'; }
     }
 };
 
@@ -441,14 +447,14 @@ var Controllers = {
                 var item = dm.rotationList[dm.rotationIndex]; barcode = item.barcode;
                 result = Generators.generateDM(barcode, item.template);
                 var currentRotationIdx = dm.rotationIndex;
-                dm.generatedCodes.push({ code: result.code, barcode: barcode, templateName: result.templateName, rotationIdx: currentRotationIdx });
+                dm.generatedCodes.push({ code: result.code, barcode: barcode, templateName: result.templateName, rotationIdx: currentRotationIdx, secondaryCode: null });
                 dm.codeHistoryIndex = dm.generatedCodes.length - 1;
                 dm.rotationIndex = (dm.rotationIndex + 1) % dm.rotationList.length;
                 this.showCodeInfo(barcode, result.templateName, currentRotationIdx + 1, dm.rotationList.length);
                 this.updateBadge(true, dm.rotationList.length);
             } else {
                 result = Generators.generateDM();
-                dm.generatedCodes.push({ code: result.code, barcode: result.barcode, templateName: result.templateName, rotationIdx: dm.generatedCodes.length });
+                dm.generatedCodes.push({ code: result.code, barcode: result.barcode, templateName: result.templateName, rotationIdx: dm.generatedCodes.length, secondaryCode: null });
                 dm.codeHistoryIndex = dm.generatedCodes.length - 1;
                 this.showCodeInfo(result.barcode, result.templateName, dm.codeHistoryIndex + 1, DEMO_GTINS.length);
                 this.updateBadge(true, DEMO_GTINS.length);
@@ -498,6 +504,10 @@ var Controllers = {
             } else {
                 if (secCont) secCont.style.display='none';
             }
+            // Persist secondary code into cache entry for navigation replay
+            if (dm.generatedCodes.length > 0) {
+                dm.generatedCodes[dm.generatedCodes.length - 1].secondaryCode = secText;
+            }
             // Update code text
             var codeEl=document.getElementById('current-code');
             if(codeEl){codeEl.textContent=result._displayCode;codeEl.classList.add('flash');setTimeout(function(){codeEl.classList.remove('flash');},300);}
@@ -510,10 +520,62 @@ var Controllers = {
             if (index < 0 || index >= dm.generatedCodes.length) return;
             var cached = dm.generatedCodes[index];
             dm.codeHistoryIndex = index;
-            Generators.renderDM(document.getElementById('datamatrix-container'), cached.code);
+
+            // Determine current double-scan mode
+            var doubleScanMode = null;
+            var dsIds = ['doubleScanSameDM','doubleScanDmEan','doubleScanSameEan','doubleScanDifferentDM'];
+            var dsModes = ['sameDM','dmEan','sameEan','differentDM'];
+            for (var di=0; di<dsIds.length; di++) { var dsCb=document.getElementById(dsIds[di]); if(dsCb&&dsCb.checked){doubleScanMode=dsModes[di];break;} }
+
+            // Primary
+            var primaryDmCont = document.getElementById('datamatrix-container');
+            var primaryEanSvg = document.getElementById('primary-ean13-barcode');
+            var displayCode;
+            if (doubleScanMode === 'sameEan') {
+                if (primaryDmCont) primaryDmCont.style.display = 'none';
+                var ean13p = Generators.extractEAN13FromDM(cached.code);
+                if (!primaryEanSvg) { primaryEanSvg = document.createElementNS('http://www.w3.org/2000/svg','svg'); primaryEanSvg.id = 'primary-ean13-barcode'; var pc = document.getElementById('primary-code-container'); if (pc) pc.appendChild(primaryEanSvg); }
+                if (primaryEanSvg) { primaryEanSvg.style.display = 'block'; Generators.renderBarcode(primaryEanSvg, ean13p||cached.code, 'EAN13'); }
+                displayCode = ean13p || cached.code;
+            } else {
+                if (primaryDmCont) { primaryDmCont.style.display = 'flex'; Generators.renderDM(primaryDmCont, cached.code); }
+                if (primaryEanSvg) primaryEanSvg.style.display = 'none';
+                displayCode = cached.code;
+            }
+
+            // Secondary
+            var secCont = document.getElementById('secondary-code-container');
+            var secDm = document.getElementById('datamatrix-container-2');
+            var secEan = document.getElementById('ean13-barcode');
+            var secText = null;
+            if (doubleScanMode) {
+                if (secCont) secCont.style.display = 'block';
+                if (doubleScanMode === 'sameDM') {
+                    if (secDm) { secDm.style.display='flex'; Generators.renderDM(secDm, cached.code); }
+                    if (secEan) secEan.style.display = 'none';
+                    secText = cached.code;
+                } else if (doubleScanMode === 'dmEan' || doubleScanMode === 'sameEan') {
+                    var ean13s = Generators.extractEAN13FromDM(cached.code);
+                    if (secDm) secDm.style.display = 'none';
+                    if (secEan) { secEan.style.display='block'; Generators.renderBarcode(secEan, ean13s||cached.code, 'EAN13'); }
+                    secText = ean13s || cached.code;
+                } else if (doubleScanMode === 'differentDM') {
+                    var secCode = cached.secondaryCode || cached.code;
+                    if (secDm) { secDm.style.display='flex'; Generators.renderDM(secDm, secCode); }
+                    if (secEan) secEan.style.display = 'none';
+                    secText = secCode;
+                }
+            } else {
+                if (secCont) secCont.style.display = 'none';
+            }
+
+            // Text displays
             var codeEl = document.getElementById('current-code');
-            if (codeEl) { codeEl.textContent = cached.code; codeEl.classList.add('flash'); setTimeout(function() { codeEl.classList.remove('flash'); }, 300); }
-            // Используем сохранённый rotationIdx и общее количество GTIN
+            if (codeEl) { codeEl.textContent = displayCode; codeEl.classList.add('flash'); setTimeout(function(){codeEl.classList.remove('flash');},300); }
+            var secDisp = document.getElementById('secondary-code-display'), secTxtEl = document.getElementById('secondary-code-text');
+            if (doubleScanMode && secText && secDisp && secTxtEl) { secDisp.style.display='block'; secTxtEl.textContent=secText; secTxtEl.classList.add('flash'); setTimeout(function(){secTxtEl.classList.remove('flash');},300); }
+            else if (secDisp) secDisp.style.display = 'none';
+
             var isRotationMode = dm.rotationList.length > 0;
             var displayIdx = cached.rotationIdx !== undefined ? cached.rotationIdx + 1 : index + 1;
             var total = isRotationMode ? dm.rotationList.length : DEMO_GTINS.length;
@@ -580,14 +642,11 @@ var Controllers = {
                 var item = dm.rotationList[dm.rotationIndex];
                 var result = Generators.generateDM(item.barcode, item.template);
                 var currentRotationIdx = dm.rotationIndex;
-                dm.generatedCodes.push({ code: result.code, barcode: item.barcode, templateName: result.templateName, rotationIdx: currentRotationIdx });
+                dm.generatedCodes.push({ code: result.code, barcode: item.barcode, templateName: result.templateName, rotationIdx: currentRotationIdx, secondaryCode: null });
                 dm.codeHistoryIndex = dm.generatedCodes.length - 1;
                 dm.rotationIndex = (dm.rotationIndex + 1) % dm.rotationList.length;
-                Generators.renderDM(document.getElementById('datamatrix-container'), result.code);
-                var codeEl = document.getElementById('current-code');
-                if (codeEl) { codeEl.textContent = result.code; codeEl.classList.add('flash'); setTimeout(function() { codeEl.classList.remove('flash'); }, 300); }
-                this.showCodeInfo(item.barcode, result.templateName, currentRotationIdx + 1, dm.rotationList.length);
-                this.updateBadge(true, dm.rotationList.length);
+                // displayFromCache handles double-scan rendering + text + info + badge
+                this.displayFromCache(dm.generatedCodes.length - 1);
             } else {
                 // Демо-режим - не генерируем бесконечно, только листаем кэш
                 // Если кэша нет - ничего не делаем (демо работает только при автоматической ротации)
