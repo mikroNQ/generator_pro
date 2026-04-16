@@ -455,8 +455,12 @@ var Controllers = {
             } else {
                 result = Generators.generateDM();
                 dm.generatedCodes.push({ code: result.code, barcode: result.barcode, templateName: result.templateName, rotationIdx: dm.generatedCodes.length, secondaryCode: null });
+                // Prevent unbounded cache growth in demo mode (arrows don't work here anyway)
+                var maxDemo = DEMO_GTINS.length;
+                if (dm.generatedCodes.length > maxDemo) dm.generatedCodes.splice(0, dm.generatedCodes.length - maxDemo);
                 dm.codeHistoryIndex = dm.generatedCodes.length - 1;
-                this.showCodeInfo(result.barcode, result.templateName, dm.codeHistoryIndex + 1, DEMO_GTINS.length);
+                var demoPos = ((demoGtinIndex - 1) % DEMO_GTINS.length + DEMO_GTINS.length) % DEMO_GTINS.length + 1;
+                this.showCodeInfo(result.barcode, result.templateName, demoPos, DEMO_GTINS.length);
                 this.updateBadge(true, DEMO_GTINS.length);
             }
             // Broken DataMatrix
@@ -577,8 +581,10 @@ var Controllers = {
             else if (secDisp) secDisp.style.display = 'none';
 
             var isRotationMode = dm.rotationList.length > 0;
-            var displayIdx = cached.rotationIdx !== undefined ? cached.rotationIdx + 1 : index + 1;
             var total = isRotationMode ? dm.rotationList.length : DEMO_GTINS.length;
+            var displayIdx = isRotationMode
+                ? (cached.rotationIdx !== undefined ? cached.rotationIdx + 1 : index + 1)
+                : (index % DEMO_GTINS.length) + 1;
             this.showCodeInfo(cached.barcode, cached.templateName, displayIdx, total);
             this.updateBadge(true, total);
         },
