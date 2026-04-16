@@ -449,7 +449,10 @@
         /* Secondary code container */
         #datamatrix-container-2{width:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:#fff;border-radius:16px}
         #datamatrix-container-2 canvas{width:90%!important;height:90%!important;object-fit:contain}
-        #ean13-barcode{max-width:100%;height:auto;display:block;margin:0 auto}
+        #code-container{overflow:hidden}
+        #primary-code-container,#secondary-code-container{max-width:100%;overflow:hidden}
+        #ean13-barcode,#primary-ean13-barcode{max-width:100%;height:auto;display:block;margin:0 auto}
+        #code-container svg{max-width:100%;height:auto}
         /* Code display section */
         .code-display-section{margin:10px auto;max-width:95%}
         .code-display-item{margin-bottom:6px}

@@ -114,6 +114,7 @@ var Utils = {
     calcControlCore: function(code) { var sum = 0, d = code.split('').filter(function(c) { return /\d/.test(c); }); for (var i = 0; i < d.length; i++) sum += parseInt(d[i]); return sum % 10; },
     calcControlEAN13: function(code) { var d = code.split('').map(function(c) { return parseInt(c) || 0; }), sum = 0; for (var i = 0; i < d.length; i++) sum += d[i] * (i % 2 ? 3 : 1); return (10 - (sum % 10)) % 10; },
     randomWeight: function(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; },
+    formatWeight: function(g) { var n = Number(g) || 0; return n >= 1000 ? (n / 1000).toFixed(3) + ' кг' : n + ' г'; },
     escapeHtml: function(t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML; },
     scrollToElement: function(el, offset) {
         if (!el) return;
@@ -789,11 +790,13 @@ var Controllers = {
             if (btn) btn.classList.add('active'); if (tab) tab.classList.add('active');
             if (this.current === 'datamatrix') Controllers.DM.stopTimer();
             if (this.current === 'weightcarousel' && AppState.wc.isRotating) Controllers.WC.stopRotation();
+            if (this.current === 'gs1pack' && AppState.gs1.isRotating) Controllers.GS1.stopRotation();
             if (name === 'datamatrix') { Controllers.DM.generateAndDisplay(); Controllers.DM.startTimer(); }
             if (name === 'library') { UI.renderDmFolders(); UI.renderDmItems(); UI.renderHistory(); }
             if (name === 'barcode') UI.renderBarcodeFields();
             if (name === 'weightcarousel') { UI.renderWcFolders(); UI.renderWcItems(); }
             if (name === 'simplegen') { UI.renderSgFolders(); Controllers.SG.closeFolder(); }
+            if (name === 'gs1pack') { UI.renderGs1Folders(); UI.renderGs1Items(); }
             this.current = name;
         }
     },
