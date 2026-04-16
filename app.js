@@ -122,6 +122,17 @@ var Utils = {
         var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
         var targetY = rect.top + scrollTop - (offset || 20);
         window.scrollTo({ top: targetY, behavior: 'smooth' });
+    },
+    // Centre #code-container vertically in the viewport (Chrome + Safari)
+    scrollToBarcode: function() {
+        setTimeout(function() {
+            var el = document.getElementById('code-container');
+            if (!el) return;
+            var rect = el.getBoundingClientRect();
+            var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            var targetY = scrollTop + rect.top - (window.innerHeight / 2) + (rect.height / 2);
+            window.scrollTo({ top: Math.max(0, targetY), behavior: 'smooth' });
+        }, 60);
     }
 };
 
@@ -1104,19 +1115,11 @@ function init() {
                 doubleScanIds.filter(function(oid){return oid!==id;}).forEach(function(oid){var o=document.getElementById(oid);if(o)o.checked=false;});
             }
             Controllers.DM.generateAndDisplay();
-            // Scroll code-container to vertical center after DOM settles
-            setTimeout(function() {
-                var el = document.getElementById('code-container');
-                if (!el) return;
-                var rect = el.getBoundingClientRect();
-                var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-                var targetY = scrollTop + rect.top - (window.innerHeight / 2) + (rect.height / 2);
-                window.scrollTo({ top: Math.max(0, targetY), behavior: 'smooth' });
-            }, 60);
+            Utils.scrollToBarcode();
         };
     });
-    if(brokenDmCb) { brokenDmCb.onchange=function() { var bdo=document.getElementById('brokenDmOptions'); if(this.checked){doubleScanIds.forEach(function(id){var cb=document.getElementById(id);if(cb)cb.checked=false;});if(bdo)bdo.style.display='block';}else{if(bdo)bdo.style.display='none';} Controllers.DM.generateAndDisplay(); }; }
-    var brokenDmRadios=document.getElementsByName('brokenDmType'); for(var bri=0;bri<brokenDmRadios.length;bri++){brokenDmRadios[bri].onchange=function(){if(brokenDmCb&&brokenDmCb.checked)Controllers.DM.generateAndDisplay();};}
+    if(brokenDmCb) { brokenDmCb.onchange=function() { var bdo=document.getElementById('brokenDmOptions'); if(this.checked){doubleScanIds.forEach(function(id){var cb=document.getElementById(id);if(cb)cb.checked=false;});if(bdo)bdo.style.display='block';}else{if(bdo)bdo.style.display='none';} Controllers.DM.generateAndDisplay(); Utils.scrollToBarcode(); }; }
+    var brokenDmRadios=document.getElementsByName('brokenDmType'); for(var bri=0;bri<brokenDmRadios.length;bri++){brokenDmRadios[bri].onchange=function(){if(brokenDmCb&&brokenDmCb.checked){Controllers.DM.generateAndDisplay();Utils.scrollToBarcode();}};}
     document.onkeydown = function(e) {
         // DataMatrix - стрелки при остановленном таймере
         var dm = document.getElementById('tab-datamatrix');
