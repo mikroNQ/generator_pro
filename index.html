@@ -432,6 +432,46 @@
         .saved-item div[style*="color:#666"],.weight-item div[style*="color:#666"]{color:var(--text-muted)!important}
         .bulk-actions span{color:var(--text-light)}
         .bulk-actions strong{color:var(--primary)}
+
+        /* Double scan settings */
+        .double-scan-settings{background:rgba(255,255,255,0.05);border-radius:16px;padding:15px;margin-bottom:15px;border:1px solid var(--glass-border)}
+        .double-scan-options{display:flex;flex-direction:column;gap:8px}
+        .custom-checkbox-label{display:flex;align-items:center;gap:10px;cursor:pointer;color:var(--text-muted);padding:5px 0}
+        .custom-checkbox-checkmark{width:20px;height:20px;border:2px solid var(--glass-border);border-radius:5px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.05);transition:all .2s}
+        .custom-checkbox-label input:checked~.custom-checkbox-checkmark{background:var(--primary);border-color:var(--primary)}
+        .custom-checkbox-label input:checked~.custom-checkbox-checkmark::after{content:'✓';color:#fff;font-size:.75em;font-weight:700}
+        .custom-checkbox-label input[type=checkbox],.custom-checkbox-label input[type=radio]{display:none}
+        .custom-checkbox-text{color:var(--text-muted);font-size:.9em}
+        .nested-options{padding:10px 0 0 28px}
+        .radio-label .custom-checkbox-checkmark{border-radius:50%}
+        /* Secondary code container */
+        #datamatrix-container-2{width:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:#fff;border-radius:16px}
+        #datamatrix-container-2 canvas{width:90%!important;height:90%!important;object-fit:contain}
+        #ean13-barcode{max-width:100%;height:auto;display:block;margin:0 auto}
+        /* Code display section */
+        .code-display-section{margin:10px auto;max-width:95%}
+        .code-display-item{margin-bottom:6px}
+        .code-label{font-size:.75em;color:var(--text-muted);margin-bottom:3px;text-align:center}
+        .code-value{font-family:monospace;font-size:11px;background:rgba(0,0,0,0.4);color:var(--text-light);padding:8px 12px;border-radius:50px;word-break:break-all;text-align:center;min-height:32px;display:block}
+        /* GS1 styles */
+        .gs1-form{background:rgba(255,255,255,0.05);border-radius:20px;padding:18px;margin-bottom:15px;border:1px solid var(--glass-border)}
+        .gs1-carousel-display{background:#fff;border-radius:20px;padding:20px 10px;margin:20px 0;text-align:center;border:2px solid var(--primary);overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.2)}
+        .gs1-qr-wrapper{display:flex;align-items:center;justify-content:center;min-height:160px;padding:10px;overflow:hidden;position:relative}
+        .gs1-qr-wrapper canvas{max-width:160px;max-height:160px}
+        .gs1-carousel-nav{display:flex;justify-content:center;gap:60px;margin-top:15px}
+        @media(max-width:500px){.gs1-carousel-nav{gap:40px}}
+        .gs1-arrow-btn{background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:50%;width:48px;height:48px;min-width:48px;min-height:48px;font-size:1.4em;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--primary);flex-shrink:0;transition:all .2s}
+        .gs1-arrow-btn:active{background:rgba(16,185,129,0.2)}
+        .gs1-interval-btn{padding:8px 14px;border:none;background:transparent;border-radius:50px;font-size:.9em;cursor:pointer;color:var(--text-muted);font-weight:500;min-width:45px;height:36px;transition:all .2s}
+        .gs1-interval-btn.active{background:var(--primary);color:#fff;font-weight:600;box-shadow:0 2px 10px rgba(16,185,129,0.3)}
+        .gs1-qr-wrapper.qr-pulse canvas{animation:qrFlyThrough 0.9s ease-in-out forwards}
+        @keyframes qrFlyThrough{0%{transform:translateX(-100%);opacity:0}22%{transform:translateX(0);opacity:1}55%{transform:translateX(0);opacity:1}100%{transform:translateX(100%);opacity:0}}
+        .gs1-qr-wrapper.qr-slide canvas{animation:qrSlideIn .3s ease-out forwards}
+        @keyframes qrSlideIn{0%{transform:translateX(-50%);opacity:0}100%{transform:translateX(0);opacity:1}}
+        .gs1-qr-wrapper.qr-static canvas{transform:translateX(0);opacity:1}
+        .input-with-suffix{display:flex;gap:8px;align-items:center}
+        .input-with-suffix input{flex:1}
+        .suffix{color:var(--text-muted);font-weight:600}
     </style>
 </head>
 <body>
@@ -448,11 +488,45 @@
         <button class="tab-btn" data-tab="barcode">Весовые</button>
         <button class="tab-btn" data-tab="simplegen">Конструктор</button>
         <button class="tab-btn" data-tab="weightcarousel">Карусель</button>
+        <button class="tab-btn" data-tab="gs1pack">Фасовка GS1</button>
     </div>
     
     <div id="tab-datamatrix" class="tab-content active">
         <div id="mode-indicator"><span class="mode-badge default" id="mode-badge">Демо</span></div>
-        <div id="code-container"><div id="datamatrix-container"></div></div>
+        
+        <!-- Двойное сканирование -->
+        <div class="double-scan-settings">
+            <label style="font-weight:700;margin-bottom:10px;display:block">Двойное сканирование:</label>
+            <div class="double-scan-options">
+                <label class="custom-checkbox-label"><input type="checkbox" id="doubleScanSameDM"><span class="custom-checkbox-checkmark"></span><span class="custom-checkbox-text">Одинаковый СИ + Одинаковый СИ</span></label>
+                <label class="custom-checkbox-label"><input type="checkbox" id="doubleScanDmEan"><span class="custom-checkbox-checkmark"></span><span class="custom-checkbox-text">СИ + ШК</span></label>
+                <label class="custom-checkbox-label"><input type="checkbox" id="doubleScanSameEan"><span class="custom-checkbox-checkmark"></span><span class="custom-checkbox-text">ШК + ШК</span></label>
+                <label class="custom-checkbox-label"><input type="checkbox" id="doubleScanDifferentDM"><span class="custom-checkbox-checkmark"></span><span class="custom-checkbox-text">Разные СИ1 + СИ2</span></label>
+            </div>
+        </div>
+        
+        <!-- Сломанный DataMatrix -->
+        <div class="double-scan-settings">
+            <label class="custom-checkbox-label"><input type="checkbox" id="brokenDataMatrix"><span class="custom-checkbox-checkmark"></span><span class="custom-checkbox-text">Сломанный DataMatrix</span></label>
+            <div id="brokenDmOptions" class="nested-options" style="display:none;">
+                <label style="font-size:.85em;color:var(--text-light);margin-bottom:8px;display:block;font-weight:600;">Тип поломки:</label>
+                <label class="custom-checkbox-label radio-label" style="margin-bottom:5px;"><input type="radio" name="brokenDmType" value="removeChars" checked><span class="custom-checkbox-checkmark"></span><span class="custom-checkbox-text" style="font-size:.9em;">Удалить символы</span></label>
+                <label class="custom-checkbox-label radio-label" style="margin-bottom:5px;"><input type="radio" name="brokenDmType" value="wrongChecksum"><span class="custom-checkbox-checkmark"></span><span class="custom-checkbox-text" style="font-size:.9em;">Испортить контрольную цифру</span></label>
+                <label class="custom-checkbox-label radio-label" style="margin-bottom:5px;"><input type="radio" name="brokenDmType" value="replaceGS"><span class="custom-checkbox-checkmark"></span><span class="custom-checkbox-text" style="font-size:.9em;">Заменить GS символы</span></label>
+                <label class="custom-checkbox-label radio-label" style="margin-bottom:5px;"><input type="radio" name="brokenDmType" value="addJunk"><span class="custom-checkbox-checkmark"></span><span class="custom-checkbox-text" style="font-size:.9em;">Добавить мусорные символы</span></label>
+                <label class="custom-checkbox-label radio-label"><input type="radio" name="brokenDmType" value="random"><span class="custom-checkbox-checkmark"></span><span class="custom-checkbox-text" style="font-size:.9em;">Случайный способ</span></label>
+            </div>
+        </div>
+        
+        <div id="code-container">
+            <div id="primary-code-container">
+                <div id="datamatrix-container"></div>
+            </div>
+            <div id="secondary-code-container" style="display:none;margin-top:20px">
+                <div id="datamatrix-container-2"></div>
+                <svg id="ean13-barcode" style="display:none"></svg>
+            </div>
+        </div>
         <div class="dm-carousel-nav" id="dm-nav-arrows" style="display:none">
             <button id="dm-prev-btn" class="dm-arrow-btn">❮</button>
             <button id="dm-next-btn" class="dm-arrow-btn">❯</button>
@@ -462,7 +536,16 @@
             <div><span class="label">Шаблон:</span> <span class="value" id="info-template">-</span></div>
             <div class="counter" id="info-counter">1/1</div>
         </div>
-        <div id="current-code">-</div>
+        <div class="code-display-section">
+            <div class="code-display-item">
+                <div class="code-label">Основной код:</div>
+                <div id="current-code" class="code-value">-</div>
+            </div>
+            <div class="code-display-item" id="secondary-code-display" style="display:none">
+                <div class="code-label">Вторичный код:</div>
+                <div id="secondary-code-text" class="code-value">-</div>
+            </div>
+        </div>
         <div class="dm-carousel-controls">
             <div class="interval-selector">
                 <button class="interval-btn" data-interval="0.5">0.5</button>
@@ -691,6 +774,89 @@
             <input type="number" id="wc-custom-interval" class="custom-interval-input" step="0.1" min="0.1" value="0.7">
         </div>
     </div>
+    <!-- GS1 Pack Tab -->
+    <div id="tab-gs1pack" class="tab-content">
+        <div class="folders-section">
+            <h4>Папки (GS1 Фасовка)</h4>
+            <div class="folder-list" id="gs1FolderList"></div>
+            <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
+                <button class="btn btn-primary btn-sm" id="gs1-run-folder">Запуск</button>
+                <button class="btn btn-warning btn-sm" id="gs1-rename-folder">✎</button>
+                <button class="btn btn-danger btn-sm" id="gs1-delete-folder">×</button>
+            </div>
+        </div>
+        <div class="gs1-form">
+            <div class="form-group"><label>Название папки</label><input type="text" id="gs1FolderName" placeholder="Товары со скидкой..."></div>
+            <div class="form-group"><label>GoodsId коды (по одному на строку)</label><textarea id="gs1GoodsIds" placeholder="123&#10;456789&#10;99" style="height:70px"></textarea></div>
+            <label style="font-weight:700;margin-bottom:15px">Тип товара:</label>
+            <div class="weight-mode-switch" style="margin-bottom:20px">
+                <input type="radio" name="gs1Type" id="gs1TypePiece" value="piece" checked><label class="weight-mode-label" for="gs1TypePiece">Штучный</label>
+                <input type="radio" name="gs1Type" id="gs1TypeWeight" value="weight"><label class="weight-mode-label" for="gs1TypeWeight">Весовой</label>
+            </div>
+            <div id="gs1-piece-section">
+                <label style="font-weight:700;margin-bottom:15px">Количество штук:</label>
+                <div class="weight-mode-switch">
+                    <input type="radio" name="gs1PieceMode" id="gs1PieceRandom" value="random" checked><label class="weight-mode-label" for="gs1PieceRandom">Random</label>
+                    <input type="radio" name="gs1PieceMode" id="gs1PieceFixed" value="fixed"><label class="weight-mode-label" for="gs1PieceFixed">Фикс.</label>
+                </div>
+                <div class="form-group" id="gs1-random-quantity"><label>Диапазон кол-ва</label><div class="weight-range-row"><input type="number" id="gs1QuantityMin" value="1" step="0.01"><span>—</span><input type="number" id="gs1QuantityMax" value="100" step="0.01"></div></div>
+                <div class="form-group d-none" id="gs1-fixed-quantity"><label>Фикс. количество</label><input type="number" id="gs1FixedQuantity" value="50" step="0.01"></div>
+            </div>
+            <div id="gs1-weight-section" class="d-none">
+                <label style="font-weight:700;margin-bottom:15px">Вес товара:</label>
+                <div class="weight-mode-switch">
+                    <input type="radio" name="gs1WeightMode" id="gs1WeightRandom" value="random" checked><label class="weight-mode-label" for="gs1WeightRandom">Random</label>
+                    <input type="radio" name="gs1WeightMode" id="gs1WeightFixed" value="fixed"><label class="weight-mode-label" for="gs1WeightFixed">Фикс.</label>
+                </div>
+                <div class="form-group" id="gs1-random-weight"><label>Диапазон веса (г)</label><div class="weight-range-row"><input type="number" id="gs1WeightMin" value="100"><span>—</span><input type="number" id="gs1WeightMax" value="5000"></div></div>
+                <div class="form-group d-none" id="gs1-fixed-weight"><label>Фикс. вес (г)</label><input type="number" id="gs1FixedWeight" value="500"></div>
+            </div>
+            <hr class="weight-divider">
+            <label style="font-weight:700;margin-bottom:15px">Скидка:</label>
+            <div class="weight-mode-switch">
+                <input type="radio" name="gs1DiscountMode" id="gs1DiscFixed" value="fixed" checked><label class="weight-mode-label" for="gs1DiscFixed">Фикс.</label>
+                <input type="radio" name="gs1DiscountMode" id="gs1DiscRandom" value="random"><label class="weight-mode-label" for="gs1DiscRandom">Rand</label>
+            </div>
+            <div class="form-group" id="gs1-disc-fixed-group"><label>Размер скидки</label><div class="input-with-suffix"><input type="number" id="gs1Discount" value="10" min="0" max="99"><span class="suffix">%</span></div></div>
+            <div class="form-group d-none" id="gs1-disc-random-group"><label>Диапазон скидки</label><div class="weight-range-row"><input type="number" id="gs1DiscMin" value="5"><span>—</span><input type="number" id="gs1DiscMax" value="30"></div></div>
+            <div class="form-group" style="margin-top:15px"><label>Вариаций</label><input type="number" id="gs1Variations" value="10" min="1" max="100"><div class="hint">На каждый GoodsId</div></div>
+            <div class="controls"><button class="btn btn-purple" id="gs1AddItems">Добавить</button></div>
+        </div>
+        <div class="bulk-actions">
+            <span style="flex:1;font-size:.8em;color:var(--text-light)">В папке: <strong id="gs1-items-count">0</strong> <span id="gs1-current-folder-name"></span></span>
+            <button class="btn btn-outline btn-sm" id="gs1-select-all">Все</button>
+            <button class="btn btn-outline btn-sm" id="gs1-deselect-all">Снять</button>
+            <button class="btn btn-danger btn-sm" id="gs1-clear-selected">×</button>
+        </div>
+        <div class="weight-items-list" id="gs1ItemsList"></div>
+        <div class="rotation-controls" id="gs1-rotation-controls">
+            <div id="gs1-rotation-status">Создайте папку</div>
+            <div style="margin-top:10px;display:flex;justify-content:center;gap:10px">
+                <button class="btn btn-success btn-sm" id="gs1-start-btn">Старт</button>
+                <button class="btn btn-warning btn-sm" id="gs1-stop-btn" style="display:none">Стоп</button>
+            </div>
+        </div>
+        <div class="gs1-carousel-display" id="gs1CarouselDisplay" style="display:none">
+            <div id="gs1CodeInfo" style="color:#333;font-size:.9em;min-height:40px;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:4px 12px">-</div>
+            <div id="gs1CodeText" style="font-size:.65em;word-break:break-all;color:#666;margin:5px 0 10px 0;font-family:monospace">-</div>
+            <div class="gs1-qr-wrapper">
+                <div id="gs1QRContainer"></div>
+            </div>
+            <div id="gs1CarouselCounter" style="color:#666;margin-top:10px">1/1</div>
+            <div class="gs1-carousel-nav">
+                <button class="gs1-arrow-btn" id="gs1PrevBtn">❮</button>
+                <button class="gs1-arrow-btn" id="gs1NextBtn">❯</button>
+            </div>
+        </div>
+        <div class="interval-selector">
+            <button class="gs1-interval-btn" data-interval="0.5">0.5</button>
+            <button class="gs1-interval-btn active" data-interval="0.7">0.7</button>
+            <button class="gs1-interval-btn" data-interval="1">1</button>
+            <button class="gs1-interval-btn" data-interval="2">2</button>
+            <input type="number" id="gs1-custom-interval" class="custom-interval-input" step="0.1" min="0.1" value="0.7">
+        </div>
+    </div>
+
 </div>
 </div>
 

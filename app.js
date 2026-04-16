@@ -39,6 +39,7 @@ var AppState = {
     savedItems: [],
     wc: { folders: [], selectedFolderId: null, timerValue: 0.7, remaining: 0.7, timerInterval: null, isRotating: false, rotationIndex: 0, rotationItems: [] },
     sg: { folders: [], selectedFolderId: null, carouselIndex: 0, isNewFolderMode: false },
+    gs1: { folders: [], selectedFolderId: null, timerValue: 0.7, remaining: 0.7, timerInterval: null, isRotating: false, rotationIndex: 0, rotationItems: [] },
     history: { items: [], maxItems: 50 },
 
     getDmFolder: function(id) {
@@ -58,6 +59,12 @@ var AppState = {
         for (var i = 0; i < this.sg.folders.length; i++) if (this.sg.folders[i].id === fid) return this.sg.folders[i];
         return null;
     },
+    getGs1Folder: function(id) {
+        var fid = id || this.gs1.selectedFolderId;
+        for (var i = 0; i < this.gs1.folders.length; i++) if (this.gs1.folders[i].id === fid) return this.gs1.folders[i];
+        return null;
+    },
+    getGs1FolderItems: function() { var f = this.getGs1Folder(); return f ? f.items : []; },
     addToHistory: function(entry) {
         this.history.items.unshift({ id: Date.now().toString(), timestamp: new Date().toISOString(), type: entry.type, code: entry.code });
         if (this.history.items.length > this.history.maxItems) this.history.items = this.history.items.slice(0, this.history.maxItems);
@@ -70,7 +77,7 @@ var Storage = {
     load: function() {
         try {
             var data = localStorage.getItem(AppState.STORAGE_KEY);
-            if (data) { var p = JSON.parse(data); AppState.savedItems = p.savedItems || []; AppState.dm.folders = p.dmFolders || []; AppState.wc.folders = p.wcFolders || []; AppState.sg.folders = p.sgFolders || []; AppState.history.items = p.history || []; }
+            if (data) { var p = JSON.parse(data); AppState.savedItems = p.savedItems || []; AppState.dm.folders = p.dmFolders || []; AppState.wc.folders = p.wcFolders || []; AppState.sg.folders = p.sgFolders || []; AppState.gs1.folders = p.gs1Folders || []; AppState.history.items = p.history || []; }
             // Миграция старых данных в папку "Без папки"
             if (AppState.savedItems.length > 0 && AppState.dm.folders.length === 0) {
                 AppState.dm.folders.push({ id: 'dmf_legacy', name: 'Импортированные', items: AppState.savedItems.slice() });
@@ -80,17 +87,17 @@ var Storage = {
         } catch (e) { console.error('Load error:', e); }
     },
     save: function() {
-        try { localStorage.setItem(AppState.STORAGE_KEY, JSON.stringify({ savedItems: AppState.savedItems, dmFolders: AppState.dm.folders, wcFolders: AppState.wc.folders, sgFolders: AppState.sg.folders, history: AppState.history.items })); }
+        try { localStorage.setItem(AppState.STORAGE_KEY, JSON.stringify({ savedItems: AppState.savedItems, dmFolders: AppState.dm.folders, wcFolders: AppState.wc.folders, sgFolders: AppState.sg.folders, gs1Folders: AppState.gs1.folders, history: AppState.history.items })); }
         catch (e) { console.error('Save error:', e); }
     },
     exportData: function() {
-        var blob = new Blob([JSON.stringify({ savedItems: AppState.savedItems, dmFolders: AppState.dm.folders, wcFolders: AppState.wc.folders, sgFolders: AppState.sg.folders, history: AppState.history.items }, null, 2)], {type: 'application/json'});
+        var blob = new Blob([JSON.stringify({ savedItems: AppState.savedItems, dmFolders: AppState.dm.folders, wcFolders: AppState.wc.folders, sgFolders: AppState.sg.folders, gs1Folders: AppState.gs1.folders, history: AppState.history.items }, null, 2)], {type: 'application/json'});
         var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup_' + new Date().toISOString().slice(0,10) + '.json'; a.click();
     },
     importData: function(file) {
         var reader = new FileReader();
         reader.onload = function(e) {
-            try { var d = JSON.parse(e.target.result); if (confirm('Заменить данные?')) { AppState.savedItems = d.savedItems || []; AppState.dm.folders = d.dmFolders || []; AppState.wc.folders = d.wcFolders || []; AppState.sg.folders = d.sgFolders || []; AppState.history.items = d.history || []; Storage.save(); location.reload(); } }
+            try { var d = JSON.parse(e.target.result); if (confirm('Заменить данные?')) { AppState.savedItems = d.savedItems || []; AppState.dm.folders = d.dmFolders || []; AppState.wc.folders = d.wcFolders || []; AppState.sg.folders = d.sgFolders || []; AppState.gs1.folders = d.gs1Folders || []; AppState.history.items = d.history || []; Storage.save(); location.reload(); } }
             catch (err) { alert('Ошибка файла'); }
         }; reader.readAsText(file);
     }
@@ -150,7 +157,44 @@ var Generators = {
         return { code: code + ctrl, format: fmt, weight: weight, plu: plu, prefix: prefix, discount: disc };
     },
     renderBarcode: function(svg, code, fmt) { if (!svg) return; svg.innerHTML = ''; try { JsBarcode(svg, code, { format: fmt || 'CODE128', height: 70, displayValue: true, fontSize: 14, margin: 10, width: 2 }); } catch (e) { try { JsBarcode(svg, code, { format: 'CODE128', height: 70, displayValue: true, width: 2 }); } catch(err) {} } },
-    generateSimple: function(v, t) { var code = v.trim(); if (t === 'EAN13' && code.length === 12 && /^\d+$/.test(code)) code += Utils.calcControlEAN13(code); return { code: code, format: t }; }
+    generateSimple: function(v, t) { var code = v.trim(); if (t === 'EAN13' && code.length === 12 && /^\d+$/.test(code)) code += Utils.calcControlEAN13(code); return { code: code, format: t }; },
+    generateUniqueId: function() { var c='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',s=''; for(var i=0;i<8;i++) s+=c.charAt(Math.floor(Math.random()*c.length)); return s; },
+    calculateDecimalPosition: function(q) { var s=q.toString(),d=s.indexOf('.'); return d===-1?0:s.length-d-1; },
+    extractEAN13FromDM: function(dmCode) { var m=dmCode.match(/01(\d{14})/); if(!m) return null; var e=m[1].substring(1,13); return e+Utils.calcControlEAN13(e); },
+    breakDataMatrix: function(code, method) {
+        if (!code) return code;
+        var m = method||'removeChars';
+        if (m==='random') { var ms=['removeChars','wrongChecksum','replaceGS','addJunk']; m=ms[Math.floor(Math.random()*ms.length)]; }
+        if (m==='removeChars') { var rc=Math.floor(Math.random()*6)+5,pos=Math.floor(Math.random()*Math.max(0,code.length-rc)); return code.slice(0,pos)+code.slice(pos+rc); }
+        if (m==='wrongChecksum') { if(code.indexOf('01')===0&&code.length>=16){var g=code.substring(2,16),cg=''; for(var k=0;k<g.length;k++){if(Math.random()<0.3&&/\d/.test(g[k])){cg+=(parseInt(g[k])+Math.floor(Math.random()*9)+1)%10;}else{cg+=g[k];}} return '01'+cg+code.slice(16);} var bc=''; for(var i=0;i<code.length;i++){bc+=(/\d/.test(code[i])&&Math.random()<0.2)?((parseInt(code[i])+5)%10):code[i];} return bc; }
+        if (m==='replaceGS') { return code.replace(//g,'|||'); }
+        if (m==='addJunk') { var jc='XYZQW!@#$%&*',jk='',jn=Math.floor(Math.random()*6)+10; for(var j=0;j<jn;j++) jk+=jc.charAt(Math.floor(Math.random()*jc.length)); var ip=Math.floor(Math.random()*code.length); return code.slice(0,ip)+jk+code.slice(ip); }
+        return code;
+    },
+    generateGS1Code: function(params) {
+        var GS=String.fromCharCode(29),PREFIX='99MPUC',AI_GOODS_ID='240',AI_QTY='37',AI_WEIGHT='3103',AI_DISC='98',AI_UID='21',AI_DEC='97';
+        var code=PREFIX+GS;
+        var gid=(params.goodsId||'').replace(/\D/g,'').substring(0,8);
+        if(!gid) throw new Error('GoodsId required');
+        code+=AI_GOODS_ID+gid+GS;
+        if(params.type==='piece'){
+            var qty=params.quantity||0,dp=params.decimalPosition!==undefined?params.decimalPosition:this.calculateDecimalPosition(qty);
+            var qr=Math.round(qty*Math.pow(10,dp));
+            code+=AI_QTY+Utils.padZeros(qr,8)+GS;
+            if(params.discount>0){code+=AI_DISC+Utils.padZeros(params.discount,2)+GS;code+=AI_UID+(params.uniqueId||this.generateUniqueId())+GS;}
+            if(dp>0) code+=AI_DEC+dp+GS;
+        } else if(params.type==='weight'){
+            code+=AI_WEIGHT+Utils.padZeros(params.weight||0,6)+GS;
+            if(params.discount>0){code+=AI_DISC+Utils.padZeros(params.discount,2)+GS;code+=AI_UID+(params.uniqueId||this.generateUniqueId())+GS;}
+        } else { throw new Error('Invalid type'); }
+        return code;
+    },
+    renderGS1QR: function(container, code) {
+        if(!container) return;
+        container.innerHTML='';
+        try { var canvas=document.createElement('canvas'); bwipjs.toCanvas(canvas,{bcid:'qrcode',text:code,scale:3,eclevel:'M'}); container.appendChild(canvas); }
+        catch(e) { container.innerHTML='<div style="color:red">Ошибка QR</div>'; }
+    }
 };
 
 var UI = {
@@ -295,6 +339,54 @@ var UI = {
         document.getElementById('sgCarouselCounter').textContent = (idx + 1) + '/' + folder.items.length;
         Generators.renderBarcode(document.getElementById('sgCarouselSvg'), item.code, item.type);
     },
+    renderGs1Folders: function() {
+        var c=document.getElementById('gs1FolderList'); if(!c) return;
+        if(AppState.gs1.folders.length===0){c.innerHTML='<div class="empty-state">Нет папок</div>';}
+        else {
+            var frag=document.createDocumentFragment();
+            AppState.gs1.folders.forEach(function(folder){
+                var d=document.createElement('div'); d.className='folder-item'+(folder.id===AppState.gs1.selectedFolderId?' selected':'');
+                d.innerHTML='<div>📦</div><div style="flex:1"><b>'+Utils.escapeHtml(folder.name)+'</b><div style="font-size:.8em;color:#666">'+folder.items.length+' шт</div></div>';
+                d.onclick=function(){AppState.gs1.selectedFolderId=folder.id;UI.renderGs1Folders();UI.renderGs1Items();};
+                frag.appendChild(d);
+            });
+            c.innerHTML=''; c.appendChild(frag);
+        }
+        var nameEl=document.getElementById('gs1-current-folder-name'),folder=AppState.getGs1Folder();
+        if(nameEl) nameEl.innerHTML=folder?'<span class="current-folder-badge">📦 '+Utils.escapeHtml(folder.name)+'</span>':'';
+    },
+    renderGs1Items: function() {
+        var c=document.getElementById('gs1ItemsList'),items=AppState.getGs1FolderItems(),cnt=document.getElementById('gs1-items-count');
+        if(cnt) cnt.textContent=items.length; if(!c) return;
+        if(items.length===0){c.innerHTML='<div class="empty-state">Выберите папку</div>';}
+        else {
+            var frag=document.createDocumentFragment();
+            items.forEach(function(item){
+                var d=document.createElement('div'); d.className='weight-item'+(item.active?' active':'');
+                var tl=item.type==='piece'?'Штучн':'Весов';
+                var vt=item.type==='piece'?(item.quantity+' шт'):Utils.formatWeight(item.weight);
+                var dt=item.discount>0?' | '+item.discount+'%':'';
+                var sc=item.code.substring(0,25)+'...';
+                d.innerHTML='<div class="info"><div class="code" style="font-size:.7em">'+sc+'</div><div style="font-size:.8em;color:#666">ID: '+item.goodsId+' | '+vt+' | '+tl+dt+'</div></div>'
+                    +'<div style="display:flex;gap:8px"><button class="btn btn-sm '+(item.active?'btn-success':'btn-outline')+'" data-action="toggle">'+(item.active?'✓':'○')+'</button>'
+                    +'<button class="btn btn-sm btn-danger" data-action="delete">✕</button></div>';
+                d.querySelector('[data-action="toggle"]').onclick=function(){item.active=!item.active;Storage.save();UI.renderGs1Items();};
+                d.querySelector('[data-action="delete"]').onclick=function(){var fl=AppState.getGs1Folder();if(fl){fl.items=fl.items.filter(function(x){return x.id!==item.id;});Storage.save();UI.renderGs1Items();}};
+                frag.appendChild(d);
+            });
+            c.innerHTML=''; c.appendChild(frag);
+        }
+        this.updateGs1Status();
+    },
+    updateGs1Status: function() {
+        var el=document.getElementById('gs1-rotation-status'); if(!el) return;
+        var folder=AppState.getGs1Folder();
+        if(!folder){el.textContent='Создайте папку';return;}
+        var active=folder.items.filter(function(x){return x.active;});
+        el.innerHTML=AppState.gs1.isRotating?'🔄 Ротация: '+active.length+' кодов':'Выбрано: <b>'+active.length+'</b> из '+folder.items.length;
+        var ctrl=document.getElementById('gs1-rotation-controls');
+        if(ctrl) ctrl.className='rotation-controls'+(AppState.gs1.isRotating?' active':'');
+    },
     renderBarcodeFields: function() {
         var c = document.getElementById('barcodeParams'), type = document.getElementById('barcodeType').value, cfg = Generators.barcodeConfigs[type];
         if (!c || !cfg) return;
@@ -340,10 +432,13 @@ var Controllers = {
     DM: {
         generateAndDisplay: function() {
             var dm = AppState.dm, result, barcode;
+            var doubleScanMode = null;
+            var dsIds = ['doubleScanSameDM','doubleScanDmEan','doubleScanSameEan','doubleScanDifferentDM'];
+            var dsModes = ['sameDM','dmEan','sameEan','differentDM'];
+            for (var di=0; di<dsIds.length; di++) { var dsCb=document.getElementById(dsIds[di]); if(dsCb&&dsCb.checked){doubleScanMode=dsModes[di];break;} }
             if (dm.isRotating && dm.rotationList.length > 0) {
                 var item = dm.rotationList[dm.rotationIndex]; barcode = item.barcode;
                 result = Generators.generateDM(barcode, item.template);
-                // Сохраняем сгенерированный код в кэш с текущим индексом ротации
                 var currentRotationIdx = dm.rotationIndex;
                 dm.generatedCodes.push({ code: result.code, barcode: barcode, templateName: result.templateName, rotationIdx: currentRotationIdx });
                 dm.codeHistoryIndex = dm.generatedCodes.length - 1;
@@ -352,15 +447,62 @@ var Controllers = {
                 this.updateBadge(true, dm.rotationList.length);
             } else {
                 result = Generators.generateDM();
-                // Кэшируем и демо-коды для навигации с реальным GTIN
                 dm.generatedCodes.push({ code: result.code, barcode: result.barcode, templateName: result.templateName, rotationIdx: dm.generatedCodes.length });
                 dm.codeHistoryIndex = dm.generatedCodes.length - 1;
-                // Показываем информацию о GTIN даже в демо-режиме
                 this.showCodeInfo(result.barcode, result.templateName, dm.codeHistoryIndex + 1, DEMO_GTINS.length);
                 this.updateBadge(true, DEMO_GTINS.length);
             }
-            Generators.renderDM(document.getElementById('datamatrix-container'), result.code);
-            var codeEl = document.getElementById('current-code'); if (codeEl) { codeEl.textContent = result.code; codeEl.classList.add('flash'); setTimeout(function() { codeEl.classList.remove('flash'); }, 300); }
+            // Broken DataMatrix
+            var brokenCb = document.getElementById('brokenDataMatrix');
+            if (brokenCb && brokenCb.checked) {
+                var methodRadios = document.getElementsByName('brokenDmType'), selMethod='removeChars';
+                for (var ri=0; ri<methodRadios.length; ri++) { if(methodRadios[ri].checked){selMethod=methodRadios[ri].value;break;} }
+                result.code = Generators.breakDataMatrix(result.code, selMethod);
+            }
+            // Primary render
+            var primaryDmCont = document.getElementById('datamatrix-container');
+            var primaryEanSvg = document.getElementById('primary-ean13-barcode');
+            if (doubleScanMode === 'sameEan') {
+                if (primaryDmCont) primaryDmCont.style.display='none';
+                var ean13p = Generators.extractEAN13FromDM(result.code);
+                if (!primaryEanSvg) { primaryEanSvg=document.createElementNS('http://www.w3.org/2000/svg','svg'); primaryEanSvg.id='primary-ean13-barcode'; var pc=document.getElementById('primary-code-container'); if(pc) pc.appendChild(primaryEanSvg); }
+                if (primaryEanSvg) { primaryEanSvg.style.display='block'; Generators.renderBarcode(primaryEanSvg, ean13p||result.code, 'EAN13'); }
+                result._displayCode = ean13p || result.code;
+            } else {
+                if (primaryDmCont) { primaryDmCont.style.display='flex'; Generators.renderDM(primaryDmCont, result.code); }
+                if (primaryEanSvg) primaryEanSvg.style.display='none';
+                result._displayCode = result.code;
+            }
+            // Secondary code
+            var secCont = document.getElementById('secondary-code-container');
+            var secDm = document.getElementById('datamatrix-container-2');
+            var secEan = document.getElementById('ean13-barcode');
+            var secText = null;
+            if (doubleScanMode) {
+                if (secCont) secCont.style.display='block';
+                if (doubleScanMode==='sameDM') {
+                    if (secDm){secDm.style.display='flex';Generators.renderDM(secDm,result.code);} if(secEan)secEan.style.display='none';
+                    secText=result.code;
+                } else if (doubleScanMode==='dmEan'||doubleScanMode==='sameEan') {
+                    var ean13s=Generators.extractEAN13FromDM(result.code);
+                    if (secDm) secDm.style.display='none';
+                    if (secEan){secEan.style.display='block';Generators.renderBarcode(secEan,ean13s||result.code,'EAN13');}
+                    secText=ean13s||result.code;
+                } else if (doubleScanMode==='differentDM') {
+                    var nextBarcode2=dm.rotationList.length>0?dm.rotationList[dm.rotationIndex%dm.rotationList.length].barcode:DEMO_GTINS[(demoGtinIndex)%DEMO_GTINS.length];
+                    var result2=Generators.generateDM(nextBarcode2);
+                    if (secDm){secDm.style.display='flex';Generators.renderDM(secDm,result2.code);} if(secEan)secEan.style.display='none';
+                    secText=result2.code;
+                }
+            } else {
+                if (secCont) secCont.style.display='none';
+            }
+            // Update code text
+            var codeEl=document.getElementById('current-code');
+            if(codeEl){codeEl.textContent=result._displayCode;codeEl.classList.add('flash');setTimeout(function(){codeEl.classList.remove('flash');},300);}
+            var secDisp=document.getElementById('secondary-code-display'), secTxtEl=document.getElementById('secondary-code-text');
+            if(doubleScanMode&&secText&&secDisp&&secTxtEl){secDisp.style.display='block';secTxtEl.textContent=secText;secTxtEl.classList.add('flash');setTimeout(function(){secTxtEl.classList.remove('flash');},300);}
+            else if(secDisp){secDisp.style.display='none';}
         },
         displayFromCache: function(index) {
             var dm = AppState.dm;
@@ -681,6 +823,131 @@ var Controllers = {
         clearSelected: function() { var f = AppState.getDmFolder(); if (f && confirm('Удалить выбранные?')) { f.items = f.items.filter(function(x) { return !x.active; }); Storage.save(); UI.renderDmItems(); UI.renderDmFolders(); } },
         deleteFolder: function() { var f = AppState.getDmFolder(); if (f && confirm('Удалить папку "' + f.name + '"?')) { AppState.dm.folders = AppState.dm.folders.filter(function(x) { return x.id !== f.id; }); AppState.dm.selectedFolderId = null; Storage.save(); UI.renderDmFolders(); UI.renderDmItems(); Controllers.DM.stopRotation(); } },
         renameFolder: function() { var f = AppState.getDmFolder(); if (f) { var n = prompt('Новое имя папки:', f.name); if (n && n.trim()) { f.name = n.trim(); Storage.save(); UI.renderDmFolders(); } } }
+    },
+    GS1: {
+        addItems: function() {
+            var folderName=document.getElementById('gs1FolderName').value.trim();
+            var goodsIdRaw=document.getElementById('gs1GoodsIds').value.trim();
+            var variations=parseInt(document.getElementById('gs1Variations').value)||10;
+            var typeEl=document.querySelector('input[name="gs1Type"]:checked');
+            var productType=typeEl?typeEl.value:'piece';
+            var goodsIdList=goodsIdRaw.split('\n').map(function(l){return l.trim().replace(/\D/g,'');}).filter(function(c){return c.length>0&&c.length<=8;});
+            if(goodsIdList.length===0){alert('Введите хотя бы один GoodsId (1-8 цифр)!');return;}
+            var qtyMode;
+            if(productType==='piece'){var pm=document.querySelector('input[name="gs1PieceMode"]:checked');qtyMode=pm?pm.value:'random';}
+            else{var wm=document.querySelector('input[name="gs1WeightMode"]:checked');qtyMode=wm?wm.value:'random';}
+            var discModeEl=document.querySelector('input[name="gs1DiscountMode"]:checked');
+            var discMode=discModeEl?discModeEl.value:'fixed';
+            var fixedDisc=parseInt(document.getElementById('gs1Discount').value)||0;
+            var discMin=parseInt(document.getElementById('gs1DiscMin').value)||0;
+            var discMax=parseInt(document.getElementById('gs1DiscMax').value)||30;
+            if(discMin>discMax){var tmp=discMin;discMin=discMax;discMax=tmp;}
+            var qtyMin,qtyMax,fixedQty,weightMin,weightMax,fixedWeight;
+            if(productType==='piece'){
+                if(qtyMode==='fixed'){fixedQty=parseFloat(document.getElementById('gs1FixedQuantity').value)||50;}
+                else{qtyMin=parseFloat(document.getElementById('gs1QuantityMin').value)||1;qtyMax=parseFloat(document.getElementById('gs1QuantityMax').value)||100;if(qtyMin>=qtyMax){alert('Мин. количество должно быть меньше макс.!');return;}}
+            } else {
+                if(qtyMode==='fixed'){fixedWeight=parseInt(document.getElementById('gs1FixedWeight').value)||500;}
+                else{weightMin=parseInt(document.getElementById('gs1WeightMin').value)||100;weightMax=parseInt(document.getElementById('gs1WeightMax').value)||5000;if(weightMin>=weightMax){alert('Мин. вес должен быть меньше макс.!');return;}}
+            }
+            var items=[],baseId=Date.now();
+            goodsIdList.forEach(function(goodsId,gIdx){
+                for(var i=0;i<variations;i++){
+                    var discount=discMode==='fixed'?fixedDisc:Utils.randomWeight(discMin,discMax);
+                    var params={goodsId:goodsId,type:productType,discount:discount};
+                    if(productType==='piece'){
+                        var quantity=qtyMode==='fixed'?fixedQty:(qtyMin+Math.random()*(qtyMax-qtyMin));
+                        quantity=Math.round(quantity*1000)/1000;params.quantity=quantity;
+                    } else {
+                        params.weight=qtyMode==='fixed'?fixedWeight:Utils.randomWeight(weightMin,weightMax);
+                    }
+                    try{
+                        var code=Generators.generateGS1Code(params);
+                        items.push({id:baseId+'_'+gIdx+'_'+i,code:code,goodsId:goodsId,type:productType,quantity:params.quantity,weight:params.weight,discount:discount,active:true});
+                    }catch(e){console.error('[GS1]',e);}
+                }
+            });
+            if(items.length===0){alert('Не удалось сгенерировать коды!');return;}
+            var folder;
+            if(folderName){
+                folder=AppState.gs1.folders.find(function(f){return f.name.toLowerCase()===folderName.toLowerCase();});
+                if(!folder){folder={id:baseId+'_f',name:folderName,items:[]};AppState.gs1.folders.push(folder);}
+            } else if(AppState.gs1.selectedFolderId){
+                folder=AppState.getGs1Folder();
+            } else {
+                var dn='GS1 '+(productType==='piece'?'Штучн':'Весов')+' '+goodsIdList[0];
+                folder={id:baseId+'_f',name:dn,items:[]};AppState.gs1.folders.push(folder);
+            }
+            folder.items=items;
+            AppState.gs1.selectedFolderId=folder.id;
+            Storage.save();UI.renderGs1Folders();UI.renderGs1Items();
+            document.getElementById('gs1FolderName').value='';document.getElementById('gs1GoodsIds').value='';
+            alert('Добавлено '+items.length+' кодов');
+        },
+        startRotation: function() {
+            var folder=AppState.getGs1Folder();
+            if(!folder){alert('Выберите папку!');return;}
+            var active=folder.items.filter(function(x){return x.active;});
+            if(active.length===0){alert('Выберите коды для ротации!');return;}
+            AppState.gs1.rotationItems=active;AppState.gs1.rotationIndex=0;AppState.gs1.isRotating=true;
+            document.getElementById('gs1-start-btn').style.display='none';document.getElementById('gs1-stop-btn').style.display='inline-flex';
+            document.getElementById('gs1CarouselDisplay').style.display='block';
+            UI.updateGs1Status();this.displayCode();this.startTimer();
+            setTimeout(function(){var el=document.getElementById('gs1CarouselDisplay');if(el)el.scrollIntoView({behavior:'smooth',block:'nearest'});},100);
+        },
+        stopRotation: function() {
+            AppState.gs1.isRotating=false;this.stopTimer();
+            document.getElementById('gs1-start-btn').style.display='inline-flex';document.getElementById('gs1-stop-btn').style.display='none';
+            var w=document.querySelector('.gs1-qr-wrapper');if(w){w.classList.remove('qr-pulse','qr-slide');w.classList.add('qr-static');}
+            UI.updateGs1Status();
+        },
+        displayCode: function() {
+            var items=AppState.gs1.rotationItems; if(!items.length) return;
+            var item=items[AppState.gs1.rotationIndex%items.length];
+            var info='<b>GoodsId:</b> '+item.goodsId+' | ';
+            if(item.type==='piece') info+='<b>Кол-во:</b> '+item.quantity+' шт'; else info+='<b>Вес:</b> '+Utils.formatWeight(item.weight);
+            if(item.discount>0) info+=' | <b>Скидка:</b> '+item.discount+'%';
+            document.getElementById('gs1CodeInfo').innerHTML=info;
+            document.getElementById('gs1CodeText').textContent=item.code;
+            document.getElementById('gs1CarouselCounter').textContent=((AppState.gs1.rotationIndex%items.length)+1)+'/'+items.length;
+            Generators.renderGS1QR(document.getElementById('gs1QRContainer'),item.code);
+            var w=document.querySelector('.gs1-qr-wrapper');
+            if(w){w.classList.remove('qr-pulse','qr-static','qr-slide');void w.offsetWidth;w.classList.add('qr-pulse');}
+            AppState.gs1.rotationIndex++;
+            AppState.addToHistory({type:'GS1',code:item.code});
+        },
+        displayCodeManual: function() {
+            var items=AppState.gs1.rotationItems; if(!items.length) return;
+            var item=items[AppState.gs1.rotationIndex%items.length];
+            var info='<b>GoodsId:</b> '+item.goodsId+' | ';
+            if(item.type==='piece') info+='<b>Кол-во:</b> '+item.quantity+' шт'; else info+='<b>Вес:</b> '+Utils.formatWeight(item.weight);
+            if(item.discount>0) info+=' | <b>Скидка:</b> '+item.discount+'%';
+            document.getElementById('gs1CodeInfo').innerHTML=info;
+            document.getElementById('gs1CodeText').textContent=item.code;
+            document.getElementById('gs1CarouselCounter').textContent=((AppState.gs1.rotationIndex%items.length)+1)+'/'+items.length;
+            Generators.renderGS1QR(document.getElementById('gs1QRContainer'),item.code);
+            var w=document.querySelector('.gs1-qr-wrapper');
+            if(w){w.classList.remove('qr-pulse','qr-static','qr-slide');void w.offsetWidth;w.classList.add('qr-slide');}
+            AppState.gs1.rotationIndex++;
+        },
+        manualNext: function() { if(AppState.gs1.rotationItems.length>0) this.displayCodeManual(); },
+        manualPrev: function() { if(AppState.gs1.rotationItems.length>0){var l=AppState.gs1.rotationItems.length;AppState.gs1.rotationIndex=(AppState.gs1.rotationIndex-2+l*100)%l;this.displayCodeManual();} },
+        startTimer: function() {
+            this.stopTimer();
+            AppState.gs1.remaining=AppState.gs1.timerValue;
+            var self=this;
+            AppState.gs1.timerInterval=setInterval(function(){
+                AppState.gs1.remaining-=0.1;
+                if(AppState.gs1.remaining<=0.05){self.displayCode();AppState.gs1.remaining=AppState.gs1.timerValue;}
+            },100);
+        },
+        stopTimer: function(){if(AppState.gs1.timerInterval){clearInterval(AppState.gs1.timerInterval);AppState.gs1.timerInterval=null;}},
+        setInterval: function(v){if(isNaN(v)||v<=0)return;AppState.gs1.timerValue=v;if(AppState.gs1.isRotating)this.startTimer();},
+        selectAll: function(){var f=AppState.getGs1Folder();if(f){f.items.forEach(function(i){i.active=true;});Storage.save();UI.renderGs1Items();}},
+        deselectAll: function(){var f=AppState.getGs1Folder();if(f){f.items.forEach(function(i){i.active=false;});Storage.save();UI.renderGs1Items();}},
+        clearSelected: function(){var f=AppState.getGs1Folder();if(f&&confirm('Удалить выбранные коды?')){f.items=f.items.filter(function(x){return!x.active;});Storage.save();UI.renderGs1Items();}},
+        deleteFolder: function(){var f=AppState.getGs1Folder();if(f&&confirm('Удалить папку "'+f.name+'"?')){AppState.gs1.folders=AppState.gs1.folders.filter(function(x){return x.id!==f.id;});AppState.gs1.selectedFolderId=null;Storage.save();UI.renderGs1Folders();UI.renderGs1Items();this.stopRotation();}},
+        renameFolder: function(){var f=AppState.getGs1Folder();if(f){var n=prompt('Новое имя папки:',f.name);if(n&&n.trim()){f.name=n.trim();Storage.save();UI.renderGs1Folders();}}}
     }
 };
 
@@ -740,6 +1007,39 @@ function init() {
     document.querySelectorAll('input[name="weightMode"]').forEach(function(r) { r.onchange = function() { var m = document.querySelector('input[name="weightMode"]:checked'); var mode = m ? m.value : 'random'; document.getElementById('group-random-weight').classList.toggle('d-none', mode === 'fixed'); document.getElementById('group-fixed-weight').classList.toggle('d-none', mode !== 'fixed'); document.getElementById('wcVariationsLabel').textContent = mode === 'fixed' ? 'Повторов' : 'Вариаций'; document.getElementById('wcVariationsHint').textContent = mode === 'fixed' ? 'Повторов на PLU' : 'Весов на PLU'; }; });
     document.querySelectorAll('input[name="discountMode"]').forEach(function(r) { r.onchange = function() { var m = document.querySelector('input[name="discountMode"]:checked'); var mode = m ? m.value : 'fixed'; document.getElementById('disc-fixed-group').classList.toggle('d-none', mode !== 'fixed'); document.getElementById('disc-random-group').classList.toggle('d-none', mode === 'fixed'); }; });
     document.getElementById('wcPrefix49').onchange = function() { document.getElementById('group-discount-section').classList.toggle('d-none', !document.getElementById('wcPrefix49').checked); };
+    // GS1 events
+    document.getElementById('gs1AddItems').onclick = function() { Controllers.GS1.addItems(); };
+    document.getElementById('gs1-run-folder').onclick = function() { Controllers.GS1.startRotation(); };
+    document.getElementById('gs1-rename-folder').onclick = function() { Controllers.GS1.renameFolder(); };
+    document.getElementById('gs1-delete-folder').onclick = function() { Controllers.GS1.deleteFolder(); };
+    document.getElementById('gs1-start-btn').onclick = function() { Controllers.GS1.startRotation(); };
+    document.getElementById('gs1-stop-btn').onclick = function() { Controllers.GS1.stopRotation(); };
+    document.getElementById('gs1PrevBtn').onclick = function() { Controllers.GS1.manualPrev(); };
+    document.getElementById('gs1NextBtn').onclick = function() { Controllers.GS1.manualNext(); };
+    document.getElementById('gs1-select-all').onclick = function() { Controllers.GS1.selectAll(); };
+    document.getElementById('gs1-deselect-all').onclick = function() { Controllers.GS1.deselectAll(); };
+    document.getElementById('gs1-clear-selected').onclick = function() { Controllers.GS1.clearSelected(); };
+    document.querySelectorAll('.gs1-interval-btn').forEach(function(btn) { btn.onclick = function() { document.getElementById('gs1-custom-interval').value = btn.dataset.interval; Controllers.GS1.setInterval(parseFloat(btn.dataset.interval)); document.querySelectorAll('.gs1-interval-btn').forEach(function(b){b.classList.remove('active');}); btn.classList.add('active'); }; });
+    document.getElementById('gs1-custom-interval').onchange = function(e) { Controllers.GS1.setInterval(parseFloat(e.target.value)); };
+    document.querySelectorAll('input[name="gs1Type"]').forEach(function(r) { r.onchange = function() { var t=document.querySelector('input[name="gs1Type"]:checked').value; document.getElementById('gs1-piece-section').classList.toggle('d-none',t!=='piece'); document.getElementById('gs1-weight-section').classList.toggle('d-none',t==='piece'); }; });
+    document.querySelectorAll('input[name="gs1PieceMode"]').forEach(function(r) { r.onchange = function() { var m=document.querySelector('input[name="gs1PieceMode"]:checked').value; document.getElementById('gs1-random-quantity').classList.toggle('d-none',m==='fixed'); document.getElementById('gs1-fixed-quantity').classList.toggle('d-none',m!=='fixed'); }; });
+    document.querySelectorAll('input[name="gs1WeightMode"]').forEach(function(r) { r.onchange = function() { var m=document.querySelector('input[name="gs1WeightMode"]:checked').value; document.getElementById('gs1-random-weight').classList.toggle('d-none',m==='fixed'); document.getElementById('gs1-fixed-weight').classList.toggle('d-none',m!=='fixed'); }; });
+    document.querySelectorAll('input[name="gs1DiscountMode"]').forEach(function(r) { r.onchange = function() { var m=document.querySelector('input[name="gs1DiscountMode"]:checked').value; document.getElementById('gs1-disc-fixed-group').classList.toggle('d-none',m!=='fixed'); document.getElementById('gs1-disc-random-group').classList.toggle('d-none',m==='fixed'); }; });
+    // Double scan + broken DM events
+    var doubleScanIds=['doubleScanSameDM','doubleScanDmEan','doubleScanSameEan','doubleScanDifferentDM'];
+    var brokenDmCb=document.getElementById('brokenDataMatrix');
+    doubleScanIds.forEach(function(id) {
+        var cb=document.getElementById(id); if(!cb) return;
+        cb.onchange=function() {
+            if(this.checked){
+                if(brokenDmCb){brokenDmCb.checked=false;var bdo=document.getElementById('brokenDmOptions');if(bdo)bdo.style.display='none';}
+                doubleScanIds.filter(function(oid){return oid!==id;}).forEach(function(oid){var o=document.getElementById(oid);if(o)o.checked=false;});
+            }
+            Controllers.DM.generateAndDisplay();
+        };
+    });
+    if(brokenDmCb) { brokenDmCb.onchange=function() { var bdo=document.getElementById('brokenDmOptions'); if(this.checked){doubleScanIds.forEach(function(id){var cb=document.getElementById(id);if(cb)cb.checked=false;});if(bdo)bdo.style.display='block';}else{if(bdo)bdo.style.display='none';} Controllers.DM.generateAndDisplay(); }; }
+    var brokenDmRadios=document.getElementsByName('brokenDmType'); for(var bri=0;bri<brokenDmRadios.length;bri++){brokenDmRadios[bri].onchange=function(){if(brokenDmCb&&brokenDmCb.checked)Controllers.DM.generateAndDisplay();};}
     document.onkeydown = function(e) {
         // DataMatrix - стрелки при остановленном таймере
         var dm = document.getElementById('tab-datamatrix');
@@ -760,9 +1060,15 @@ function init() {
             if (e.key === 'ArrowLeft') Controllers.SG.prev();
             if (e.key === 'ArrowRight') Controllers.SG.next();
         }
+        // GS1 - стрелки при активной ротации
+        var gs1Tab = document.getElementById('tab-gs1pack');
+        if (gs1Tab && gs1Tab.classList.contains('active') && AppState.gs1.rotationItems.length > 0) {
+            if (e.key === 'ArrowLeft') Controllers.GS1.manualPrev();
+            if (e.key === 'ArrowRight') Controllers.GS1.manualNext();
+        }
     };
     document.onvisibilitychange = function() { if (document.hidden) { Controllers.DM.stopTimer(); Controllers.WC.stopTimer(); } else { if (Controllers.Tab.current === 'datamatrix') { Controllers.DM.generateAndDisplay(); Controllers.DM.startTimer(); } if (AppState.wc.isRotating) { Controllers.WC.displayBarcode(); Controllers.WC.startTimer(); } } };
-    UI.renderDmFolders(); UI.renderDmItems(); UI.renderBarcodeFields(); UI.renderWcFolders(); UI.renderWcItems(); UI.renderSgFolders(); UI.renderHistory();
+    UI.renderDmFolders(); UI.renderDmItems(); UI.renderBarcodeFields(); UI.renderWcFolders(); UI.renderWcItems(); UI.renderSgFolders(); UI.renderGs1Folders(); UI.renderGs1Items(); UI.renderHistory();
     setTimeout(function() { Controllers.DM.generateAndDisplay(); Controllers.DM.startTimer(); }, 300);
     console.log('[Generator v2.4] Ready - with DM folders');
 }
