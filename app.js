@@ -123,17 +123,18 @@ var Utils = {
         var targetY = rect.top + scrollTop - (offset || 20);
         window.scrollTo({ top: targetY, behavior: 'smooth' });
     },
-    // Centre #code-container vertically in the viewport (Chrome + Safari)
-    scrollToBarcode: function() {
+    // Centre any element vertically in the viewport (Chrome + Safari)
+    scrollToCenter: function(el, delay) {
         setTimeout(function() {
-            var el = document.getElementById('code-container');
             if (!el) return;
             var rect = el.getBoundingClientRect();
             var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
             var targetY = scrollTop + rect.top - (window.innerHeight / 2) + (rect.height / 2);
             window.scrollTo({ top: Math.max(0, targetY), behavior: 'smooth' });
-        }, 60);
-    }
+        }, delay || 60);
+    },
+    // Shortcut for the DataMatrix barcode container
+    scrollToBarcode: function() { this.scrollToCenter(document.getElementById('code-container')); }
 };
 
 var Generators = {
@@ -720,8 +721,9 @@ var Controllers = {
             var active = folder.items.filter(function(x) { return x.active; }); if (active.length === 0) { alert('Выберите штрихкоды!'); return; }
             AppState.wc.rotationItems = active; AppState.wc.rotationIndex = 0; AppState.wc.isRotating = true;
             document.getElementById('wc-start-btn').style.display = 'none'; document.getElementById('wc-stop-btn').style.display = 'inline-flex';
-            document.getElementById('wcCarouselDisplay').style.display = 'block'; UI.updateWcStatus(); this.displayBarcode(); this.startTimer();
-            setTimeout(function() { Utils.scrollToElement(document.getElementById('wcCarouselDisplay'), 100); }, 100);
+            var wcDisplay = document.getElementById('wcCarouselDisplay');
+            wcDisplay.style.display = 'block'; UI.updateWcStatus(); this.displayBarcode(); this.startTimer();
+            Utils.scrollToCenter(wcDisplay, 100);
         },
         stopRotation: function() {
             AppState.wc.isRotating = false; this.stopTimer();
@@ -793,7 +795,7 @@ var Controllers = {
         renameFolder: function() { var f = AppState.getWcFolder(); if (f) { var n = prompt('Имя:', f.name); if (n && n.trim()) { f.name = n.trim(); Storage.save(); UI.renderWcFolders(); } } }
     },
     SG: {
-        openFolder: function(id) { AppState.sg.selectedFolderId = id; AppState.sg.carouselIndex = 0; var folder = AppState.getSgFolder(); if (!folder) return; document.getElementById('sg-view-list').style.display = 'none'; document.getElementById('sg-view-carousel').style.display = 'block'; document.getElementById('sgActiveFolderName').textContent = folder.name; UI.renderSgCarousel(); },
+        openFolder: function(id) { AppState.sg.selectedFolderId = id; AppState.sg.carouselIndex = 0; var folder = AppState.getSgFolder(); if (!folder) return; document.getElementById('sg-view-list').style.display = 'none'; var cv = document.getElementById('sg-view-carousel'); cv.style.display = 'block'; document.getElementById('sgActiveFolderName').textContent = folder.name; UI.renderSgCarousel(); Utils.scrollToCenter(cv); },
         closeFolder: function() { AppState.sg.selectedFolderId = null; document.getElementById('sg-view-carousel').style.display = 'none'; document.getElementById('sg-view-list').style.display = 'block'; UI.renderSgFolders(); },
         next: function() { var f = AppState.getSgFolder(); if (f && f.items.length > 0) { AppState.sg.carouselIndex = (AppState.sg.carouselIndex + 1) % f.items.length; UI.renderSgCarousel(); } },
         prev: function() { var f = AppState.getSgFolder(); if (f && f.items.length > 0) { AppState.sg.carouselIndex = (AppState.sg.carouselIndex - 1 + f.items.length) % f.items.length; UI.renderSgCarousel(); } },
@@ -853,8 +855,13 @@ var Controllers = {
             if (hasError) return;
             var ctrl; if (cfg.fixedControl !== undefined) ctrl = cfg.fixedControl; else if (type === 'ean13_weight') ctrl = Utils.calcControlEAN13(code).toString(); else ctrl = Utils.calcControlCore(code).toString();
             if (document.getElementById('simulateError').checked && cfg.fixedControl === undefined) { var bad = Math.floor(Math.random() * 10).toString(); while (bad === ctrl) bad = Math.floor(Math.random() * 10).toString(); ctrl = bad; }
-            code += ctrl; document.getElementById('barcodeResult').style.display = 'block'; document.getElementById('barcodeText').textContent = code;
-            Generators.renderBarcode(document.getElementById('barcodeSvg'), code, cfg.format); AppState.addToHistory({ type: 'BC', code: code });
+            code += ctrl;
+            var barcodeResultEl = document.getElementById('barcodeResult');
+            barcodeResultEl.style.display = 'block';
+            document.getElementById('barcodeText').textContent = code;
+            Generators.renderBarcode(document.getElementById('barcodeSvg'), code, cfg.format);
+            AppState.addToHistory({ type: 'BC', code: code });
+            Utils.scrollToCenter(barcodeResultEl);
         }
     },
     Tab: {
@@ -970,9 +977,10 @@ var Controllers = {
             if(active.length===0){alert('Выберите коды для ротации!');return;}
             AppState.gs1.rotationItems=active;AppState.gs1.rotationIndex=0;AppState.gs1.isRotating=true;
             document.getElementById('gs1-start-btn').style.display='none';document.getElementById('gs1-stop-btn').style.display='inline-flex';
-            document.getElementById('gs1CarouselDisplay').style.display='block';
+            var gs1Display = document.getElementById('gs1CarouselDisplay');
+            gs1Display.style.display='block';
             UI.updateGs1Status();this.displayCode();this.startTimer();
-            setTimeout(function(){var el=document.getElementById('gs1CarouselDisplay');if(el)el.scrollIntoView({behavior:'smooth',block:'nearest'});},100);
+            Utils.scrollToCenter(gs1Display, 100);
         },
         stopRotation: function() {
             AppState.gs1.isRotating=false;this.stopTimer();
