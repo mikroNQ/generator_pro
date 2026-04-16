@@ -65,19 +65,56 @@ var AppState = {
         return null;
     },
     getGs1FolderItems: function() { var f = this.getGs1Folder(); return f ? f.items : []; },
+    _historySeq: 0,
+    // BUGFIX: previous impl used `Date.now().toString()` as the ID which collided when many
+    // entries were pushed within the same millisecond (bulk generation / fast rotation).
+    // A monotonic counter appended to the timestamp makes IDs unique without requiring
+    // a UUID library.
     addToHistory: function(entry) {
-        this.history.items.unshift({ id: Date.now().toString(), timestamp: new Date().toISOString(), type: entry.type, code: entry.code });
-        if (this.history.items.length > this.history.maxItems) this.history.items = this.history.items.slice(0, this.history.maxItems);
-        Storage.save(); UI.renderHistory();
+        this._historySeq = (this._historySeq + 1) % 1000000;
+        this.history.items.unshift({
+            id: Date.now().toString() + '_' + this._historySeq,
+            timestamp: new Date().toISOString(),
+            type: entry.type,
+            code: entry.code
+        });
+        if (this.history.items.length > this.history.maxItems) {
+            this.history.items = this.history.items.slice(0, this.history.maxItems);
+        }
+        Storage.save();
+        UI.renderHistory();
     },
     clearHistory: function() { this.history.items = []; Storage.save(); UI.renderHistory(); }
 };
 
 var Storage = {
+    // Single source of truth for the persisted shape. When adding a new feature/tab that
+    // needs its own folders or collection, extend `_snapshot`/`_apply` + bump the data
+    // shape here — load/save/export/import will pick it up automatically.
+    _snapshot: function() {
+        return {
+            savedItems: AppState.savedItems,
+            dmFolders: AppState.dm.folders,
+            wcFolders: AppState.wc.folders,
+            sgFolders: AppState.sg.folders,
+            gs1Folders: AppState.gs1.folders,
+            history: AppState.history.items
+        };
+    },
+    _apply: function(d) {
+        // Defensive: keep the current value when the incoming field isn't an array.
+        var arr = function(v, fallback) { return Array.isArray(v) ? v : (fallback || []); };
+        AppState.savedItems = arr(d.savedItems);
+        AppState.dm.folders = arr(d.dmFolders);
+        AppState.wc.folders = arr(d.wcFolders);
+        AppState.sg.folders = arr(d.sgFolders);
+        AppState.gs1.folders = arr(d.gs1Folders);
+        AppState.history.items = arr(d.history);
+    },
     load: function() {
         try {
             var data = localStorage.getItem(AppState.STORAGE_KEY);
-            if (data) { var p = JSON.parse(data); AppState.savedItems = p.savedItems || []; AppState.dm.folders = p.dmFolders || []; AppState.wc.folders = p.wcFolders || []; AppState.sg.folders = p.sgFolders || []; AppState.gs1.folders = p.gs1Folders || []; AppState.history.items = p.history || []; }
+            if (data) this._apply(JSON.parse(data));
             // Миграция старых данных в папку "Без папки"
             if (AppState.savedItems.length > 0 && AppState.dm.folders.length === 0) {
                 AppState.dm.folders.push({ id: 'dmf_legacy', name: 'Импортированные', items: AppState.savedItems.slice() });
@@ -87,19 +124,32 @@ var Storage = {
         } catch (e) { console.error('Load error:', e); }
     },
     save: function() {
-        try { localStorage.setItem(AppState.STORAGE_KEY, JSON.stringify({ savedItems: AppState.savedItems, dmFolders: AppState.dm.folders, wcFolders: AppState.wc.folders, sgFolders: AppState.sg.folders, gs1Folders: AppState.gs1.folders, history: AppState.history.items })); }
-        catch (e) { console.error('Save error:', e); }
+        try { localStorage.setItem(AppState.STORAGE_KEY, JSON.stringify(this._snapshot())); }
+        catch (e) {
+            console.error('Save error:', e);
+            // QuotaExceededError names differ across browsers; fall back to code too.
+            var quota = e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22);
+            if (quota) alert('Хранилище браузера переполнено. Очистите историю или удалите часть папок.');
+        }
     },
     exportData: function() {
-        var blob = new Blob([JSON.stringify({ savedItems: AppState.savedItems, dmFolders: AppState.dm.folders, wcFolders: AppState.wc.folders, sgFolders: AppState.sg.folders, gs1Folders: AppState.gs1.folders, history: AppState.history.items }, null, 2)], {type: 'application/json'});
+        var blob = new Blob([JSON.stringify(this._snapshot(), null, 2)], {type: 'application/json'});
         var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup_' + new Date().toISOString().slice(0,10) + '.json'; a.click();
     },
     importData: function(file) {
         var reader = new FileReader();
         reader.onload = function(e) {
-            try { var d = JSON.parse(e.target.result); if (confirm('Заменить данные?')) { AppState.savedItems = d.savedItems || []; AppState.dm.folders = d.dmFolders || []; AppState.wc.folders = d.wcFolders || []; AppState.sg.folders = d.sgFolders || []; AppState.gs1.folders = d.gs1Folders || []; AppState.history.items = d.history || []; Storage.save(); location.reload(); } }
-            catch (err) { alert('Ошибка файла'); }
-        }; reader.readAsText(file);
+            var d;
+            try { d = JSON.parse(e.target.result); }
+            catch (err) { alert('Ошибка файла: некорректный JSON'); return; }
+            if (!d || typeof d !== 'object') { alert('Ошибка файла: неожиданный формат'); return; }
+            if (!confirm('Заменить данные?')) return;
+            Storage._apply(d);
+            Storage.save();
+            location.reload();
+        };
+        reader.onerror = function() { alert('Не удалось прочитать файл'); };
+        reader.readAsText(file);
     }
 };
 
@@ -110,7 +160,10 @@ var Utils = {
     randomHex: function(n) { var h = '0123456789ABCDEF', s = ''; for (var i = 0; i < n; i++) s += h[Math.floor(Math.random() * 16)]; return s; },
     randomBase64: function(n) { var c = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/', s = ''; for (var i = 0; i < n; i++) s += c[Math.floor(Math.random() * 64)]; return s; },
     padBarcode: function(b) { b = b.replace(/\D/g, ''); while (b.length < 14) b = '0' + b; return b.slice(0, 14); },
-    padZeros: function(v, l) { return (v + '').replace(/\D/g, '').padStart(l, '0'); },
+    // BUGFIX: padStart() does not truncate. If caller passed a value longer than `l` (e.g.
+    // 6-digit PLU into a 5-digit field), the resulting code length was wrong and broke
+    // checksum / render. Now we truncate to the last `l` digits (preserves low-order bits).
+    padZeros: function(v, l) { var s = (v + '').replace(/\D/g, ''); return s.length > l ? s.slice(-l) : s.padStart(l, '0'); },
     calcControlCore: function(code) { var sum = 0, d = code.split('').filter(function(c) { return /\d/.test(c); }); for (var i = 0; i < d.length; i++) sum += parseInt(d[i]); return sum % 10; },
     calcControlEAN13: function(code) { var d = code.split('').map(function(c) { return parseInt(c) || 0; }), sum = 0; for (var i = 0; i < d.length; i++) sum += d[i] * (i % 2 ? 3 : 1); return (10 - (sum % 10)) % 10; },
     randomWeight: function(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; },
@@ -162,11 +215,15 @@ var Generators = {
         return { code: code, templateName: tmpl.name, barcode: barcode };
     },
     renderDM: function(c, code) { if (!c) return; c.innerHTML = ''; try { var canvas = document.createElement('canvas'); bwipjs.toCanvas(canvas, { bcid: 'datamatrix', text: code, scale: 4, padding: 2 }); c.appendChild(canvas); } catch (e) { c.innerHTML = '<div style="color:red">Ошибка</div>'; } },
+    // Each supported prefix is matched explicitly. New prefixes should be added as their
+    // own branch so behavior remains predictable (previously an unknown prefix silently
+    // fell through to EAN-13 which would mis-render real input).
     generateWeightBarcode: function(prefix, plu, weight, disc) {
         var code, ctrl, fmt;
         if (prefix === '77') { code = '77' + Utils.padZeros(plu, 6) + Utils.padZeros(weight, 7); ctrl = '0'; fmt = 'CODE128'; }
         else if (prefix === '49') { code = '49' + Utils.padZeros(plu, 9) + Utils.padZeros(disc || 0, 2) + Utils.padZeros(weight, 5); ctrl = Utils.calcControlCore(code).toString(); fmt = 'CODE128'; }
-        else { code = '22' + Utils.padZeros(plu, 5) + Utils.padZeros(weight, 5); ctrl = Utils.calcControlEAN13(code).toString(); fmt = 'EAN13'; }
+        else if (prefix === '22') { code = '22' + Utils.padZeros(plu, 5) + Utils.padZeros(weight, 5); ctrl = Utils.calcControlEAN13(code).toString(); fmt = 'EAN13'; }
+        else { throw new Error('Unsupported weight-barcode prefix: ' + prefix); }
         return { code: code + ctrl, format: fmt, weight: weight, plu: plu, prefix: prefix, discount: disc };
     },
     renderBarcode: function(svg, code, fmt) { if (!svg) return; svg.innerHTML = ''; try { JsBarcode(svg, code, { format: fmt || 'CODE128', height: 70, displayValue: true, fontSize: 14, margin: 10, width: 2 }); } catch (e) { try { JsBarcode(svg, code, { format: 'CODE128', height: 70, displayValue: true, width: 2 }); } catch(err) {} } },
@@ -424,20 +481,24 @@ var UI = {
                 var time = new Date(item.timestamp).toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
                 var displayCode = item.code && item.code.length > 30 ? item.code.substring(0, 30) + '...' : (item.code || '-');
                 d.innerHTML = '<span class="history-time">' + time + '</span><span class="history-type">' + (item.type || '?') + '</span><span class="history-code">' + Utils.escapeHtml(displayCode) + '</span>';
-                d.onclick = function() { 
+                d.onclick = function() {
                     if (navigator.clipboard) navigator.clipboard.writeText(item.code);
                     if (item.type === 'DM') {
                         Controllers.Tab.switchTo('datamatrix');
-                        Controllers.DM.stopTimer(); 
+                        Controllers.DM.stopTimer();
                         Generators.renderDM(document.getElementById('datamatrix-container'), item.code);
                         var codeEl = document.getElementById('current-code');
                         if(codeEl) codeEl.textContent = item.code;
                         Controllers.DM.hideCodeInfo();
                     } else if (item.type === 'BC' || item.type === 'WC') {
                         Controllers.Tab.switchTo('barcode');
-                        document.getElementById('barcodeResult').style.display = 'block';
-                        document.getElementById('barcodeText').textContent = item.code;
+                        var resEl = document.getElementById('barcodeResult'); if (resEl) resEl.style.display = 'block';
+                        var txtEl = document.getElementById('barcodeText'); if (txtEl) txtEl.textContent = item.code;
                         Generators.renderBarcode(document.getElementById('barcodeSvg'), item.code, 'CODE128');
+                    } else if (item.type === 'GS1') {
+                        Controllers.Tab.switchTo('gs1pack');
+                        Generators.renderGS1QR(document.getElementById('gs1QRContainer'), item.code);
+                        var gs1TxtEl = document.getElementById('gs1CodeText'); if (gs1TxtEl) gs1TxtEl.textContent = item.code;
                     }
                 };
                 f.appendChild(d);
@@ -683,12 +744,23 @@ var Controllers = {
         updateCountdown: function() { var el = document.getElementById('countdown'); if (el) el.textContent = 'через ' + Math.max(0, AppState.dm.remaining).toFixed(1) + ' сек'; },
         togglePlayState: function(p) {
             var play = document.getElementById('dm-play-btn'), pause = document.getElementById('dm-pause-btn'), navArrows = document.getElementById('dm-nav-arrows');
-            if (p) { play.style.display = 'none'; pause.style.display = 'inline-flex'; navArrows.style.display = 'none'; }
-            else { play.style.display = 'inline-flex'; pause.style.display = 'none'; navArrows.style.display = 'flex'; }
+            if (p) { if (play) play.style.display = 'none'; if (pause) pause.style.display = 'inline-flex'; if (navArrows) navArrows.style.display = 'none'; }
+            else { if (play) play.style.display = 'inline-flex'; if (pause) pause.style.display = 'none'; if (navArrows) navArrows.style.display = 'flex'; }
         },
-        showCodeInfo: function(b, t, i, total) { document.getElementById('code-info').style.display = 'block'; document.getElementById('info-barcode').textContent = b; document.getElementById('info-template').textContent = t; document.getElementById('info-counter').textContent = (i === 0 ? total : i) + '/' + total; },
-        hideCodeInfo: function() { document.getElementById('code-info').style.display = 'none'; },
-        updateBadge: function(r, c) { var b = document.getElementById('mode-badge'); if (r) { b.textContent = '🔄 ' + c + ' GTIN'; b.className = 'mode-badge list'; b.style.display = 'inline-block'; } else { b.className = 'mode-badge default'; b.style.display = 'none'; } }
+        showCodeInfo: function(b, t, i, total) {
+            // Callers always pass 1-based index. Previous `i === 0 ? total : i` was dead code
+            // that masked any future off-by-one regression; drop it for clarity.
+            var info = document.getElementById('code-info'); if (info) info.style.display = 'block';
+            var barcodeEl = document.getElementById('info-barcode'); if (barcodeEl) barcodeEl.textContent = b;
+            var templateEl = document.getElementById('info-template'); if (templateEl) templateEl.textContent = t;
+            var counterEl = document.getElementById('info-counter'); if (counterEl) counterEl.textContent = i + '/' + total;
+        },
+        hideCodeInfo: function() { var el = document.getElementById('code-info'); if (el) el.style.display = 'none'; },
+        updateBadge: function(r, c) {
+            var b = document.getElementById('mode-badge'); if (!b) return;
+            if (r) { b.textContent = '🔄 ' + c + ' GTIN'; b.className = 'mode-badge list'; b.style.display = 'inline-block'; }
+            else { b.className = 'mode-badge default'; b.style.display = 'none'; }
+        }
     },
     WC: {
         addItems: function() {
@@ -815,12 +887,9 @@ var Controllers = {
             }
         },
         editItemCode: function() {
-            console.log('editItemCode called');
             var f = AppState.getSgFolder();
-            console.log('folder:', f, 'carouselIndex:', AppState.sg.carouselIndex);
             if (f && f.items.length > 0) {
                 var item = f.items[AppState.sg.carouselIndex];
-                console.log('item:', item);
                 var newCode = prompt('Новый код:', item.code);
                 if (newCode !== null && newCode.trim()) {
                     item.code = newCode.trim();
@@ -964,7 +1033,9 @@ var Controllers = {
                 var dn='GS1 '+(productType==='piece'?'Штучн':'Весов')+' '+goodsIdList[0];
                 folder={id:baseId+'_f',name:dn,items:[]};AppState.gs1.folders.push(folder);
             }
-            folder.items=items;
+            // BUGFIX: append to existing items instead of overwriting (was causing data loss
+            // when adding to an already populated folder by name or selectedFolderId).
+            folder.items=folder.items.concat(items);
             AppState.gs1.selectedFolderId=folder.id;
             Storage.save();UI.renderGs1Folders();UI.renderGs1Items();
             document.getElementById('gs1FolderName').value='';document.getElementById('gs1GoodsIds').value='';
@@ -1018,7 +1089,7 @@ var Controllers = {
             AppState.gs1.rotationIndex++;
         },
         manualNext: function() { if(AppState.gs1.rotationItems.length>0) this.displayCodeManual(); },
-        manualPrev: function() { if(AppState.gs1.rotationItems.length>0){var l=AppState.gs1.rotationItems.length;AppState.gs1.rotationIndex=(AppState.gs1.rotationIndex-2+l*100)%l;this.displayCodeManual();} },
+        manualPrev: function() { if(AppState.gs1.rotationItems.length>0){var l=AppState.gs1.rotationItems.length;AppState.gs1.rotationIndex=((AppState.gs1.rotationIndex-2)%l+l)%l;this.displayCodeManual();} },
         startTimer: function() {
             this.stopTimer();
             AppState.gs1.remaining=AppState.gs1.timerValue;
@@ -1077,7 +1148,7 @@ function init() {
     document.getElementById('sgDeleteFolderBtn').onclick = function() { Controllers.SG.deleteFolder(); };
     document.getElementById('sgDeleteItemBtn').onclick = function() { Controllers.SG.deleteItem(); };
     document.getElementById('sgEditNameBtn').onclick = function() { Controllers.SG.renameItem(); };
-    document.getElementById('sgEditCodeBtn').onclick = function(e) { e.preventDefault(); e.stopPropagation(); console.log('123 button clicked'); Controllers.SG.editItemCode(); };
+    document.getElementById('sgEditCodeBtn').onclick = function(e) { e.preventDefault(); e.stopPropagation(); Controllers.SG.editItemCode(); };
     document.getElementById('wcAddToCarousel').onclick = function() { Controllers.WC.addItems(); };
     document.getElementById('wc-select-all').onclick = function() { Controllers.WC.selectAll(); };
     document.getElementById('wc-deselect-all').onclick = function() { Controllers.WC.deselectAll(); };
