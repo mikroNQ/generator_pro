@@ -370,9 +370,15 @@ var UI = {
             var f = document.createDocumentFragment();
             items.forEach(function(item) {
                 var d = document.createElement('div'); d.className = 'weight-item' + (item.active ? ' active' : '');
-                var w = (item.weight / 1000).toFixed(3) + ' кг', t = item.prefix === '77' ? 'CAS' : item.prefix === '49' ? 'C128' : 'EAN';
-                var disc = item.prefix === '49' && item.discount !== undefined ? ' | ' + item.discount + '%' : '';
-                d.innerHTML = '<div class="info"><div class="code">' + item.code + '</div><div style="font-size:.8em;color:#666">PLU: ' + item.plu + ' | ' + w + ' | ' + t + disc + '</div></div><div style="display:flex;gap:8px"><button class="btn btn-sm ' + (item.active ? 'btn-success' : 'btn-outline') + '" data-action="toggle">' + (item.active ? '✓' : '○') + '</button><button class="btn btn-sm btn-danger" data-action="delete">✕</button></div>';
+                var meta;
+                if (item.prefix === 'NONE') {
+                    meta = 'Без префикса | ' + (item.format === 'EAN13' ? 'EAN' : 'CODE');
+                } else {
+                    var w = (item.weight / 1000).toFixed(3) + ' кг', t = item.prefix === '77' ? 'CAS' : item.prefix === '49' ? 'C128' : 'EAN';
+                    var disc = item.prefix === '49' && item.discount !== undefined ? ' | ' + item.discount + '%' : '';
+                    meta = 'PLU: ' + item.plu + ' | ' + w + ' | ' + t + disc;
+                }
+                d.innerHTML = '<div class="info"><div class="code">' + item.code + '</div><div style="font-size:.8em;color:#666">' + meta + '</div></div><div style="display:flex;gap:8px"><button class="btn btn-sm ' + (item.active ? 'btn-success' : 'btn-outline') + '" data-action="toggle">' + (item.active ? '✓' : '○') + '</button><button class="btn btn-sm btn-danger" data-action="delete">✕</button></div>';
                 d.querySelector('[data-action="toggle"]').onclick = function() { item.active = !item.active; Storage.save(); UI.renderWcItems(); };
                 d.querySelector('[data-action="delete"]').onclick = function() { var fl = AppState.getWcFolder(); if (fl) { fl.items = fl.items.filter(function(x) { return x.id !== item.id; }); Storage.save(); UI.renderWcItems(); } };
                 f.appendChild(d);
@@ -764,6 +770,7 @@ var Controllers = {
     },
     WC: {
         addItems: function() {
+            if (document.getElementById('wcPrefixNone').checked) { return Controllers.WC.addRawItems(); }
             var folderName = document.getElementById('wcFolderName').value.trim(), pluRaw = document.getElementById('wcProductCode').value.trim();
             var variations = parseInt(document.getElementById('wcVariations').value) || 10;
             var modeEl = document.querySelector('input[name="weightMode"]:checked'), mode = modeEl ? modeEl.value : 'random';
@@ -787,6 +794,40 @@ var Controllers = {
             else { folder = { id: baseId + '_f', name: (mode === 'fixed' ? 'FIX ' + fixedWeight : 'RND') + ' PLU ' + pluList[0], items: [] }; AppState.wc.folders.push(folder); }
             folder.items = folder.items.concat(items); AppState.wc.selectedFolderId = folder.id; Storage.save(); UI.renderWcFolders(); UI.renderWcItems();
             document.getElementById('wcFolderName').value = ''; document.getElementById('wcProductCode').value = ''; alert('Добавлено ' + items.length + ' шт');
+        },
+        addRawItems: function() {
+            var folderName = document.getElementById('wcFolderName').value.trim();
+            var raw = document.getElementById('wcRawCodes').value;
+            var fmtEl = document.querySelector('input[name="wcRawFormat"]:checked');
+            var fmtSel = fmtEl ? fmtEl.value : 'auto';
+            var lines = raw.split('\n').map(function(l){ return l.trim(); }).filter(function(l){ return l.length > 0; });
+            if (lines.length === 0) { alert('Введите коды!'); return; }
+            var items = [], baseId = Date.now(), skipped = 0;
+            lines.forEach(function(code, i) {
+                var fmt = fmtSel, finalCode = code;
+                if (fmt === 'auto') {
+                    if (/^\d{13}$/.test(code)) { fmt = 'EAN13'; }
+                    else if (/^\d{12}$/.test(code)) { fmt = 'EAN13'; finalCode = code + Utils.calcControlEAN13(code); }
+                    else { fmt = 'CODE128'; }
+                } else if (fmt === 'EAN13') {
+                    if (/^\d{12}$/.test(code)) { finalCode = code + Utils.calcControlEAN13(code); }
+                    else if (!/^\d{13}$/.test(code)) { skipped++; return; }
+                }
+                items.push({ id: baseId + '_n_' + i, code: finalCode, format: fmt, prefix: 'NONE', active: true });
+            });
+            if (items.length === 0) { alert('Нет валидных кодов' + (skipped ? ' (отфильтровано: ' + skipped + ')' : '')); return; }
+            var folder;
+            if (folderName) {
+                folder = AppState.wc.folders.find(function(f) { return f.name.toLowerCase() === folderName.toLowerCase(); });
+                if (!folder) { folder = { id: baseId + '_f', name: folderName, items: [] }; AppState.wc.folders.push(folder); }
+            } else if (AppState.wc.selectedFolderId) { folder = AppState.getWcFolder(); }
+            else { folder = { id: baseId + '_f', name: 'RAW ' + items[0].code.substring(0, 6), items: [] }; AppState.wc.folders.push(folder); }
+            folder.items = folder.items.concat(items);
+            AppState.wc.selectedFolderId = folder.id;
+            Storage.save(); UI.renderWcFolders(); UI.renderWcItems();
+            document.getElementById('wcFolderName').value = '';
+            document.getElementById('wcRawCodes').value = '';
+            alert('Добавлено ' + items.length + ' шт' + (skipped ? ' (пропущено: ' + skipped + ')' : ''));
         },
         startRotation: function() {
             var folder = AppState.getWcFolder(); if (!folder) { alert('Выберите папку!'); return; }
@@ -815,8 +856,14 @@ var Controllers = {
         displayBarcodeManual: function() {
             var items = AppState.wc.rotationItems; if (items.length === 0) return;
             var item = items[AppState.wc.rotationIndex % items.length];
-            var w = (item.weight / 1000).toFixed(3) + ' кг', d = item.prefix === '49' && item.discount !== undefined ? ' | Скидка: ' + item.discount + '%' : '';
-            document.getElementById('wcBarcodeInfo').innerHTML = '<b>PLU:</b> ' + item.plu + ' | <b>Вес:</b> ' + w + d;
+            var infoHtml;
+            if (item.prefix === 'NONE') {
+                infoHtml = '<b>Без префикса</b> | <b>' + (item.format === 'EAN13' ? 'EAN' : 'CODE') + '</b>';
+            } else {
+                var w = (item.weight / 1000).toFixed(3) + ' кг', d = item.prefix === '49' && item.discount !== undefined ? ' | Скидка: ' + item.discount + '%' : '';
+                infoHtml = '<b>PLU:</b> ' + item.plu + ' | <b>Вес:</b> ' + w + d;
+            }
+            document.getElementById('wcBarcodeInfo').innerHTML = infoHtml;
             document.getElementById('wcBarcodeText').textContent = item.code;
             document.getElementById('wcCarouselCounter').textContent = ((AppState.wc.rotationIndex % items.length) + 1) + '/' + items.length;
             var svgEl = document.getElementById('wcBarcodeSvg');
@@ -835,9 +882,15 @@ var Controllers = {
         displayBarcode: function() {
             var items = AppState.wc.rotationItems; if (items.length === 0) return;
             var item = items[AppState.wc.rotationIndex % items.length];
-            var w = (item.weight / 1000).toFixed(3) + ' кг', d = item.prefix === '49' && item.discount !== undefined ? ' | Скидка: ' + item.discount + '%' : '';
+            var infoHtml;
+            if (item.prefix === 'NONE') {
+                infoHtml = '<b>Без префикса</b> | <b>' + (item.format === 'EAN13' ? 'EAN' : 'CODE') + '</b>';
+            } else {
+                var w = (item.weight / 1000).toFixed(3) + ' кг', d = item.prefix === '49' && item.discount !== undefined ? ' | Скидка: ' + item.discount + '%' : '';
+                infoHtml = '<b>PLU:</b> ' + item.plu + ' | <b>Вес:</b> ' + w + d;
+            }
 
-            document.getElementById('wcBarcodeInfo').innerHTML = '<b>PLU:</b> ' + item.plu + ' | <b>Вес:</b> ' + w + d;
+            document.getElementById('wcBarcodeInfo').innerHTML = infoHtml;
             document.getElementById('wcBarcodeText').textContent = item.code;
             document.getElementById('wcCarouselCounter').textContent = ((AppState.wc.rotationIndex % items.length) + 1) + '/' + items.length;
 
@@ -1164,7 +1217,32 @@ function init() {
     document.getElementById('wc-custom-interval').onchange = function(e) { Controllers.WC.setInterval(parseFloat(e.target.value)); };
     document.querySelectorAll('input[name="weightMode"]').forEach(function(r) { r.onchange = function() { var m = document.querySelector('input[name="weightMode"]:checked'); var mode = m ? m.value : 'random'; document.getElementById('group-random-weight').classList.toggle('d-none', mode === 'fixed'); document.getElementById('group-fixed-weight').classList.toggle('d-none', mode !== 'fixed'); document.getElementById('wcVariationsLabel').textContent = mode === 'fixed' ? 'Повторов' : 'Вариаций'; document.getElementById('wcVariationsHint').textContent = mode === 'fixed' ? 'Повторов на PLU' : 'Весов на PLU'; }; });
     document.querySelectorAll('input[name="discountMode"]').forEach(function(r) { r.onchange = function() { var m = document.querySelector('input[name="discountMode"]:checked'); var mode = m ? m.value : 'fixed'; document.getElementById('disc-fixed-group').classList.toggle('d-none', mode !== 'fixed'); document.getElementById('disc-random-group').classList.toggle('d-none', mode === 'fixed'); }; });
-    document.getElementById('wcPrefix49').onchange = function() { document.getElementById('group-discount-section').classList.toggle('d-none', !document.getElementById('wcPrefix49').checked); };
+    document.getElementById('wcPrefix49').onchange = function() {
+        if (document.getElementById('wcPrefixNone').checked) return;
+        document.getElementById('group-discount-section').classList.toggle('d-none', !document.getElementById('wcPrefix49').checked);
+    };
+    document.getElementById('wcPrefixNone').onchange = function() {
+        var none = this.checked;
+        var p77 = document.getElementById('wcPrefix77');
+        var p22 = document.getElementById('wcPrefix22');
+        var p49 = document.getElementById('wcPrefix49');
+        var prefSec = document.getElementById('wc-prefixed-section');
+        var noPrefSec = document.getElementById('wc-noprefix-section');
+        var discSec = document.getElementById('group-discount-section');
+        if (none) {
+            p77.checked = false; p22.checked = false; p49.checked = false;
+            p77.disabled = true; p22.disabled = true; p49.disabled = true;
+            prefSec.classList.add('d-none');
+            discSec.classList.add('d-none');
+            noPrefSec.classList.remove('d-none');
+        } else {
+            p77.disabled = false; p22.disabled = false; p49.disabled = false;
+            p77.checked = true;
+            prefSec.classList.remove('d-none');
+            noPrefSec.classList.add('d-none');
+            discSec.classList.toggle('d-none', !p49.checked);
+        }
+    };
     // GS1 events
     document.getElementById('gs1AddItems').onclick = function() { Controllers.GS1.addItems(); };
     document.getElementById('gs1-run-folder').onclick = function() { Controllers.GS1.startRotation(); };
