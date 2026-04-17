@@ -722,26 +722,38 @@
                 <label class="prefix-checkbox"><input type="checkbox" id="wcPrefix77" checked><span>77 CAS</span></label>
                 <label class="prefix-checkbox"><input type="checkbox" id="wcPrefix22"><span>22 EAN</span></label>
                 <label class="prefix-checkbox"><input type="checkbox" id="wcPrefix49"><span>49 C128</span></label>
+                <label class="prefix-checkbox"><input type="checkbox" id="wcPrefixNone"><span>Без префикса</span></label>
             </div>
-            <div class="form-group"><label>PLU коды</label><textarea id="wcProductCode" placeholder="1234" style="height:70px"></textarea></div>
-            <div id="group-discount-section" class="discount-section d-none">
-                <label style="font-weight:700">Скидка (49)</label>
-                <div class="weight-mode-switch" style="margin-top:8px">
-                    <input type="radio" name="discountMode" id="discFixed" value="fixed" checked><label class="weight-mode-label" for="discFixed">Фикс.</label>
-                    <input type="radio" name="discountMode" id="discRandom" value="random"><label class="weight-mode-label" for="discRandom">Rand</label>
+            <div id="wc-prefixed-section">
+                <div class="form-group"><label>PLU коды</label><textarea id="wcProductCode" placeholder="1234" style="height:70px"></textarea></div>
+                <div id="group-discount-section" class="discount-section d-none">
+                    <label style="font-weight:700">Скидка (49)</label>
+                    <div class="weight-mode-switch" style="margin-top:8px">
+                        <input type="radio" name="discountMode" id="discFixed" value="fixed" checked><label class="weight-mode-label" for="discFixed">Фикс.</label>
+                        <input type="radio" name="discountMode" id="discRandom" value="random"><label class="weight-mode-label" for="discRandom">Rand</label>
+                    </div>
+                    <div id="disc-fixed-group"><input type="number" id="wcDiscount" value="0" min="0" max="99"><div class="hint">%</div></div>
+                    <div id="disc-random-group" class="d-none"><div class="weight-range-row"><input type="number" id="wcDiscMin" value="5"><span>—</span><input type="number" id="wcDiscMax" value="30"></div></div>
                 </div>
-                <div id="disc-fixed-group"><input type="number" id="wcDiscount" value="0" min="0" max="99"><div class="hint">%</div></div>
-                <div id="disc-random-group" class="d-none"><div class="weight-range-row"><input type="number" id="wcDiscMin" value="5"><span>—</span><input type="number" id="wcDiscMax" value="30"></div></div>
+                <hr class="weight-divider">
+                <label style="font-weight:700">Вес:</label>
+                <div class="weight-mode-switch">
+                    <input type="radio" name="weightMode" id="weightRandom" value="random" checked><label class="weight-mode-label" for="weightRandom">Random</label>
+                    <input type="radio" name="weightMode" id="weightFixed" value="fixed"><label class="weight-mode-label" for="weightFixed">Фикс.</label>
+                </div>
+                <div class="form-group" id="group-random-weight"><label>Диапазон (г)</label><div class="weight-range-row"><input type="number" id="wcWeightMin" value="150"><span>—</span><input type="number" id="wcWeightMax" value="8000"></div></div>
+                <div class="form-group d-none" id="group-fixed-weight"><label>Фикс. вес (г)</label><input type="number" id="wcFixedWeight" value="500"></div>
+                <div class="form-group"><label id="wcVariationsLabel">Вариаций</label><input type="number" id="wcVariations" value="10" min="1" max="100"><div class="hint" id="wcVariationsHint">Весов на PLU</div></div>
             </div>
-            <hr class="weight-divider">
-            <label style="font-weight:700">Вес:</label>
-            <div class="weight-mode-switch">
-                <input type="radio" name="weightMode" id="weightRandom" value="random" checked><label class="weight-mode-label" for="weightRandom">Random</label>
-                <input type="radio" name="weightMode" id="weightFixed" value="fixed"><label class="weight-mode-label" for="weightFixed">Фикс.</label>
+            <div id="wc-noprefix-section" class="d-none">
+                <div class="form-group"><label>Коды (по одному на строку)</label><textarea id="wcRawCodes" placeholder="Один код на строку" style="height:120px"></textarea></div>
+                <label style="font-weight:700">Формат:</label>
+                <div class="weight-mode-switch" style="margin-top:8px">
+                    <input type="radio" name="wcRawFormat" id="wcRawAuto" value="auto" checked><label class="weight-mode-label" for="wcRawAuto">Auto</label>
+                    <input type="radio" name="wcRawFormat" id="wcRawEan" value="EAN13"><label class="weight-mode-label" for="wcRawEan">EAN13</label>
+                    <input type="radio" name="wcRawFormat" id="wcRawC128" value="CODE128"><label class="weight-mode-label" for="wcRawC128">CODE128</label>
+                </div>
             </div>
-            <div class="form-group" id="group-random-weight"><label>Диапазон (г)</label><div class="weight-range-row"><input type="number" id="wcWeightMin" value="150"><span>—</span><input type="number" id="wcWeightMax" value="8000"></div></div>
-            <div class="form-group d-none" id="group-fixed-weight"><label>Фикс. вес (г)</label><input type="number" id="wcFixedWeight" value="500"></div>
-            <div class="form-group"><label id="wcVariationsLabel">Вариаций</label><input type="number" id="wcVariations" value="10" min="1" max="100"><div class="hint" id="wcVariationsHint">Весов на PLU</div></div>
             <div class="controls"><button class="btn btn-purple" id="wcAddToCarousel">Добавить</button></div>
         </div>
         <div class="bulk-actions">
