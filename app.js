@@ -229,7 +229,6 @@ var Generators = {
     renderBarcode: function(svg, code, fmt) { if (!svg) return; svg.innerHTML = ''; try { JsBarcode(svg, code, { format: fmt || 'CODE128', height: 70, displayValue: true, fontSize: 14, margin: 10, width: 2 }); } catch (e) { try { JsBarcode(svg, code, { format: 'CODE128', height: 70, displayValue: true, width: 2 }); } catch(err) {} } },
     generateSimple: function(v, t) { var code = v.trim(); if (t === 'EAN13' && code.length === 12 && /^\d+$/.test(code)) code += Utils.calcControlEAN13(code); return { code: code, format: t }; },
     generateUniqueId: function() { var c='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',s=''; for(var i=0;i<8;i++) s+=c.charAt(Math.floor(Math.random()*c.length)); return s; },
-    calculateDecimalPosition: function(q) { var s=q.toString(),d=s.indexOf('.'); return d===-1?0:s.length-d-1; },
     extractEAN13FromDM: function(dmCode) { var m=dmCode.match(/01(\d{14})/); if(!m) return null; var e=m[1].substring(1,13); return e+Utils.calcControlEAN13(e); },
     breakDataMatrix: function(code, method) {
         if (!code) return code;
@@ -242,22 +241,21 @@ var Generators = {
         return code;
     },
     generateGS1Code: function(params) {
-        var GS=String.fromCharCode(29),PREFIX='99MPUC',AI_GOODS_ID='240',AI_QTY='37',AI_WEIGHT='3103',AI_DISC='98',AI_UID='21',AI_DEC='97';
-        var code=PREFIX+GS;
+        var GS=String.fromCharCode(29),AI_GOODS_ID='240',AI_QTY='37',AI_WEIGHT='3103',AI_DISC='98',AI_UID='21';
         var gid=(params.goodsId||'').replace(/\D/g,'').substring(0,8);
         if(!gid) throw new Error('GoodsId required');
-        code+=AI_GOODS_ID+gid+GS;
+        var segments=['99MPUC',AI_GOODS_ID+gid];
         if(params.type==='piece'){
-            var qty=params.quantity||0,dp=params.decimalPosition!==undefined?params.decimalPosition:this.calculateDecimalPosition(qty);
-            var qr=Math.round(qty*Math.pow(10,dp));
-            code+=AI_QTY+Utils.padZeros(qr,8)+GS;
-            if(params.discount>0){code+=AI_DISC+Utils.padZeros(params.discount,2)+GS;code+=AI_UID+(params.uniqueId||this.generateUniqueId())+GS;}
-            if(dp>0) code+=AI_DEC+dp+GS;
+            var qty=Math.round(params.quantity||0);
+            segments.push(AI_QTY+Utils.padZeros(qty,8));
         } else if(params.type==='weight'){
-            code+=AI_WEIGHT+Utils.padZeros(params.weight||0,6)+GS;
-            if(params.discount>0){code+=AI_DISC+Utils.padZeros(params.discount,2)+GS;code+=AI_UID+(params.uniqueId||this.generateUniqueId())+GS;}
+            segments.push(AI_WEIGHT+Utils.padZeros(params.weight||0,6));
         } else { throw new Error('Invalid type'); }
-        return code;
+        if(params.discount>0){
+            segments.push(AI_DISC+Utils.padZeros(params.discount,2));
+            segments.push(AI_UID+(params.uniqueId||this.generateUniqueId()));
+        }
+        return segments.join(GS);
     },
     renderGS1QR: function(container, code) {
         if(!container) return;
@@ -1052,8 +1050,8 @@ var Controllers = {
             if(discMin>discMax){var tmp=discMin;discMin=discMax;discMax=tmp;}
             var qtyMin,qtyMax,fixedQty,weightMin,weightMax,fixedWeight;
             if(productType==='piece'){
-                if(qtyMode==='fixed'){fixedQty=parseFloat(document.getElementById('gs1FixedQuantity').value)||50;}
-                else{qtyMin=parseFloat(document.getElementById('gs1QuantityMin').value)||1;qtyMax=parseFloat(document.getElementById('gs1QuantityMax').value)||100;if(qtyMin>=qtyMax){alert('Мин. количество должно быть меньше макс.!');return;}}
+                if(qtyMode==='fixed'){fixedQty=parseInt(document.getElementById('gs1FixedQuantity').value,10)||50;}
+                else{qtyMin=parseInt(document.getElementById('gs1QuantityMin').value,10)||1;qtyMax=parseInt(document.getElementById('gs1QuantityMax').value,10)||100;if(qtyMin>=qtyMax){alert('Мин. количество должно быть меньше макс.!');return;}}
             } else {
                 if(qtyMode==='fixed'){fixedWeight=parseInt(document.getElementById('gs1FixedWeight').value)||500;}
                 else{weightMin=parseInt(document.getElementById('gs1WeightMin').value)||100;weightMax=parseInt(document.getElementById('gs1WeightMax').value)||5000;if(weightMin>=weightMax){alert('Мин. вес должен быть меньше макс.!');return;}}
@@ -1064,8 +1062,7 @@ var Controllers = {
                     var discount=discMode==='fixed'?fixedDisc:Utils.randomWeight(discMin,discMax);
                     var params={goodsId:goodsId,type:productType,discount:discount};
                     if(productType==='piece'){
-                        var quantity=qtyMode==='fixed'?fixedQty:(qtyMin+Math.random()*(qtyMax-qtyMin));
-                        quantity=Math.round(quantity*1000)/1000;params.quantity=quantity;
+                        params.quantity=qtyMode==='fixed'?fixedQty:Utils.randomWeight(qtyMin,qtyMax);
                     } else {
                         params.weight=qtyMode==='fixed'?fixedWeight:Utils.randomWeight(weightMin,weightMax);
                     }
