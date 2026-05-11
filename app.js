@@ -257,6 +257,28 @@ var Generators = {
         }
         return segments.join(GS);
     },
+    // Internal price-tag barcode format: 44GGGGGGGGGPPPPPPPC
+    //   44 - fixed prefix
+    //   G  - 9-digit goods code (zero-padded)
+    //   P  - 7-digit price in kopecks (zero-padded)
+    //   C  - control digit = (sum of digits 1..18) mod 10
+    generateTsennikBarcode: function(goodsCode, priceKopecks) {
+        var g = Utils.padZeros(goodsCode, 9);
+        var p = Utils.padZeros(priceKopecks, 7);
+        var body = '44' + g + p;
+        var ctrl = Utils.calcControlCore(body).toString();
+        return { code: body + ctrl, goodsCode: g, price: p, control: ctrl };
+    },
+    parseTsennikBarcode: function(raw) {
+        var s = (raw || '').replace(/\D/g, '');
+        if (s.length !== 19) return { valid: false, error: 'Длина ' + s.length + ', ожидается 19' };
+        if (s.substring(0, 2) !== '44') return { valid: false, error: 'Префикс не 44' };
+        var g = s.substring(2, 11);
+        var p = s.substring(11, 18);
+        var ctrl = s.substring(18, 19);
+        var expected = Utils.calcControlCore(s.substring(0, 18)).toString();
+        return { valid: ctrl === expected, goodsCode: g, price: p, control: ctrl, expected: expected, code: s };
+    },
     renderGS1QR: function(container, code) {
         if(!container) return;
         container.innerHTML='';
@@ -503,6 +525,10 @@ var UI = {
                         Controllers.Tab.switchTo('gs1pack');
                         Generators.renderGS1QR(document.getElementById('gs1QRContainer'), item.code);
                         var gs1TxtEl = document.getElementById('gs1CodeText'); if (gs1TxtEl) gs1TxtEl.textContent = item.code;
+                    } else if (item.type === 'TC') {
+                        Controllers.Tab.switchTo('tsennik');
+                        var ttDecInpEl = document.getElementById('ttDecodeInput');
+                        if (ttDecInpEl) { ttDecInpEl.value = item.code; Controllers.Tsennik.decode(); }
                     }
                 };
                 f.appendChild(d);
@@ -1000,6 +1026,7 @@ var Controllers = {
             if (name === 'weightcarousel') { UI.renderWcFolders(); UI.renderWcItems(); }
             if (name === 'simplegen') { UI.renderSgFolders(); Controllers.SG.closeFolder(); }
             if (name === 'gs1pack') { UI.renderGs1Folders(); UI.renderGs1Items(); }
+            if (name === 'tsennik') { /* nothing to refresh */ }
             this.current = name;
         }
     },
@@ -1156,6 +1183,127 @@ var Controllers = {
         clearSelected: function(){var f=AppState.getGs1Folder();if(f&&confirm('Удалить выбранные коды?')){f.items=f.items.filter(function(x){return!x.active;});Storage.save();UI.renderGs1Items();}},
         deleteFolder: function(){var f=AppState.getGs1Folder();if(f&&confirm('Удалить папку "'+f.name+'"?')){AppState.gs1.folders=AppState.gs1.folders.filter(function(x){return x.id!==f.id;});AppState.gs1.selectedFolderId=null;Storage.save();UI.renderGs1Folders();UI.renderGs1Items();this.stopRotation();}},
         renameFolder: function(){var f=AppState.getGs1Folder();if(f){var n=prompt('Новое имя папки:',f.name);if(n&&n.trim()){f.name=n.trim();Storage.save();UI.renderGs1Folders();}}}
+    },
+    Tsennik: {
+        // "6.15" / "6,15" → 615 kopecks; "615" treated as kopecks already.
+        parsePriceInput: function(raw) {
+            var s = (raw || '').toString().trim().replace(',', '.');
+            if (s === '') return 0;
+            if (s.indexOf('.') >= 0) {
+                var parts = s.split('.');
+                var rub = parseInt(parts[0].replace(/\D/g, ''), 10) || 0;
+                var kopRaw = (parts[1] || '').replace(/\D/g, '');
+                var kop = parseInt((kopRaw + '00').substring(0, 2), 10) || 0;
+                return rub * 100 + kop;
+            }
+            return parseInt(s.replace(/\D/g, ''), 10) || 0;
+        },
+        formatDateStamp: function(d) {
+            var pad = function(n) { return ('0' + n).slice(-2); };
+            return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear()
+                + ' ' + pad(d.getHours()) + '.' + pad(d.getMinutes()) + '.' + pad(d.getSeconds());
+        },
+        renderTagBarcode: function(code) {
+            var svg = document.getElementById('ttTagBarcodeSvg');
+            if (!svg) return;
+            svg.innerHTML = '';
+            try {
+                JsBarcode(svg, code, {
+                    format: 'CODE128',
+                    height: 46,
+                    displayValue: true,
+                    fontSize: 11,
+                    margin: 0,
+                    width: 1.4,
+                    background: 'transparent',
+                    lineColor: '#000'
+                });
+            } catch (e) { console.error('[Tsennik render]', e); }
+        },
+        generate: function() {
+            var goodsCode = document.getElementById('ttGoodsCode').value.trim();
+            var priceRaw = document.getElementById('ttPrice').value.trim();
+            if (!goodsCode) { alert('Введите код товара!'); return; }
+            var kop = this.parsePriceInput(priceRaw);
+            if (kop <= 0) { alert('Введите цену!'); return; }
+
+            var built = Generators.generateTsennikBarcode(goodsCode, kop);
+            var code = built.code;
+            var ctrlShown = built.control;
+            // Simulate CRC error
+            if (document.getElementById('ttSimErr').checked) {
+                var bad = Math.floor(Math.random() * 10).toString();
+                while (bad === ctrlShown) bad = Math.floor(Math.random() * 10).toString();
+                code = code.substring(0, 18) + bad;
+                ctrlShown = bad;
+            }
+
+            var name = document.getElementById('ttName').value.trim() || '-';
+            var supplier = document.getElementById('ttSupplier').value.trim();
+            var country = document.getElementById('ttCountry').value.trim();
+            var dept = document.getElementById('ttDept').value.trim();
+            var ean = document.getElementById('ttEan').value.trim();
+            var perUnit = document.getElementById('ttPerUnit').value.trim() || 'Цена за 1кг';
+
+            var rub = Math.floor(kop / 100);
+            var kopPart = kop % 100;
+            var kopStr = ('0' + kopPart).slice(-2);
+
+            document.getElementById('ttTagSupplier').textContent = supplier;
+            document.getElementById('ttTagName').textContent = name;
+            document.getElementById('ttTagRub').textContent = rub;
+            document.getElementById('ttTagKop').textContent = kopStr;
+            document.getElementById('ttTagEan').textContent = ean;
+            document.getElementById('ttTagCountry').textContent = country;
+            document.getElementById('ttTagPerUnitTop').textContent = perUnit;
+            document.getElementById('ttTagPerUnitBottom').textContent = perUnit;
+            document.getElementById('ttTagSpRub').textContent = rub;
+            document.getElementById('ttTagSpKop').textContent = kopStr;
+            document.getElementById('ttTagDept').textContent = dept;
+
+            // Two date stamps: now and now+5 days
+            var now = new Date();
+            var until = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
+            document.getElementById('ttTagDates').innerHTML =
+                '<span>' + this.formatDateStamp(now) + '</span>'
+              + '<span>' + this.formatDateStamp(until) + '</span>';
+
+            this.renderTagBarcode(code);
+
+            document.getElementById('ttInfoCode').textContent = code;
+            document.getElementById('ttInfoG').textContent = built.goodsCode;
+            document.getElementById('ttInfoP').textContent = built.price + ' (= ' + (kop / 100).toFixed(2) + ' руб)';
+            document.getElementById('ttInfoC').textContent = ctrlShown
+                + (document.getElementById('ttSimErr').checked ? ' (ошибка, ожидалась ' + built.control + ')' : '');
+
+            var wrap = document.getElementById('ttTagWrapper');
+            wrap.style.display = 'block';
+            AppState.addToHistory({ type: 'TC', code: code });
+            Utils.scrollToCenter(wrap, 80);
+        },
+        decode: function() {
+            var raw = document.getElementById('ttDecodeInput').value;
+            var res = Generators.parseTsennikBarcode(raw);
+            var el = document.getElementById('ttDecodeResult');
+            if (!el) return;
+            el.style.display = 'block';
+            if (res.error) {
+                el.className = 'tsennik-decode-result bad';
+                el.innerHTML = '✗ ' + Utils.escapeHtml(res.error);
+                return;
+            }
+            var rubKop = (parseInt(res.price, 10) || 0);
+            var rub = Math.floor(rubKop / 100);
+            var kop = ('0' + (rubKop % 100)).slice(-2);
+            var html = ''
+                + '<div>ШК: ' + Utils.escapeHtml(res.code) + '</div>'
+                + '<div>Код товара (G): ' + Utils.escapeHtml(res.goodsCode) + '</div>'
+                + '<div>Цена (P): ' + Utils.escapeHtml(res.price) + ' = ' + rub + ',' + kop + ' руб</div>'
+                + '<div>Контрольная (C): ' + Utils.escapeHtml(res.control) + (res.valid ? '' : ' (ожидалась ' + Utils.escapeHtml(res.expected) + ')') + '</div>'
+                + '<div style="margin-top:8px;font-weight:700">' + (res.valid ? '✓ Контрольная цифра верна' : '✗ Контрольная цифра НЕ совпадает') + '</div>';
+            el.className = 'tsennik-decode-result ' + (res.valid ? 'ok' : 'bad');
+            el.innerHTML = html;
+        }
     }
 };
 
@@ -1258,6 +1406,10 @@ function init() {
     document.querySelectorAll('input[name="gs1PieceMode"]').forEach(function(r) { r.onchange = function() { var m=document.querySelector('input[name="gs1PieceMode"]:checked').value; document.getElementById('gs1-random-quantity').classList.toggle('d-none',m==='fixed'); document.getElementById('gs1-fixed-quantity').classList.toggle('d-none',m!=='fixed'); }; });
     document.querySelectorAll('input[name="gs1WeightMode"]').forEach(function(r) { r.onchange = function() { var m=document.querySelector('input[name="gs1WeightMode"]:checked').value; document.getElementById('gs1-random-weight').classList.toggle('d-none',m==='fixed'); document.getElementById('gs1-fixed-weight').classList.toggle('d-none',m!=='fixed'); }; });
     document.querySelectorAll('input[name="gs1DiscountMode"]').forEach(function(r) { r.onchange = function() { var m=document.querySelector('input[name="gs1DiscountMode"]:checked').value; document.getElementById('gs1-disc-fixed-group').classList.toggle('d-none',m!=='fixed'); document.getElementById('gs1-disc-random-group').classList.toggle('d-none',m==='fixed'); }; });
+    // Tsennik events
+    var ttGen = document.getElementById('ttGenerateBtn'); if (ttGen) ttGen.onclick = function() { Controllers.Tsennik.generate(); };
+    var ttDec = document.getElementById('ttDecodeBtn'); if (ttDec) ttDec.onclick = function() { Controllers.Tsennik.decode(); };
+    var ttDecInp = document.getElementById('ttDecodeInput'); if (ttDecInp) ttDecInp.onkeydown = function(e) { if (e.key === 'Enter') Controllers.Tsennik.decode(); };
     // Double scan + broken DM events
     var doubleScanIds=['doubleScanSameDM','doubleScanDmEan','doubleScanSameEan','doubleScanDifferentDM'];
     var brokenDmCb=document.getElementById('brokenDataMatrix');
