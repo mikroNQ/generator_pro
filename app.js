@@ -1210,7 +1210,9 @@ var Controllers = {
                     fontSize: 11,
                     textMargin: 1,
                     margin: 2,
-                    width: 1.4
+                    width: 1.4,
+                    background: 'transparent',
+                    lineColor: '#000'
                 });
             } catch (e) {
                 console.error('[Tsennik render]', e);
