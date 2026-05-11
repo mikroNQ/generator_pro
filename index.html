@@ -576,15 +576,6 @@
             min-width:140px;
         }
         .tt-per-unit-top{font-size:.95em;margin-bottom:4px}
-        .tt-dates{
-            font-family:monospace;
-            font-size:.85em;
-            margin-bottom:6px;
-            display:flex;
-            justify-content:flex-end;
-            gap:10px;
-            flex-wrap:wrap;
-        }
         .tt-small-price-row{
             font-weight:900;
             display:inline-flex;
@@ -1027,20 +1018,15 @@
                     <input type="text" id="ttCountry" placeholder="ЭКВАДОР" value="ЭКВАДОР">
                 </div>
                 <div class="form-group" style="flex:1">
-                    <label>Отдел</label>
-                    <input type="text" id="ttDept" placeholder="93033" value="93033">
+                    <label>EAN-13 товара (отображение)</label>
+                    <input type="text" id="ttEan" placeholder="4813494090442" value="4813494090442">
                 </div>
-            </div>
-            <div class="form-group">
-                <label>EAN-13 товара (отображение)</label>
-                <input type="text" id="ttEan" placeholder="4813494090442" value="4813494090442">
-                <div class="hint">Печатается рядом со ШК ценника</div>
             </div>
             <hr class="weight-divider">
             <label style="font-weight:700;display:block;margin-bottom:10px">ШК ценника (44GGGGGGGGGPPPPPPPC)</label>
             <div class="form-row">
                 <div class="form-group" style="flex:1">
-                    <label>Код товара G (до 9 цифр)</label>
+                    <label>GoodsID (до 9 цифр)</label>
                     <input type="text" id="ttGoodsCode" placeholder="93033" value="93033">
                 </div>
                 <div class="form-group" style="flex:1">
@@ -1078,7 +1064,6 @@
                     </div>
                     <div class="tt-br">
                         <div class="tt-per-unit-top" id="ttTagPerUnitTop">Цена за 1кг</div>
-                        <div class="tt-dates" id="ttTagDates">- -</div>
                         <div class="tt-small-price-row">
                             <span class="tt-sp-rub" id="ttTagSpRub">0</span><span class="tt-sp-suffix">р</span><span class="tt-sp-kop" id="ttTagSpKop">00</span><span class="tt-sp-suffix small">к</span>
                         </div>

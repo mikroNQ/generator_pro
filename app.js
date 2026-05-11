@@ -1198,11 +1198,6 @@ var Controllers = {
             }
             return parseInt(s.replace(/\D/g, ''), 10) || 0;
         },
-        formatDateStamp: function(d) {
-            var pad = function(n) { return ('0' + n).slice(-2); };
-            return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear()
-                + ' ' + pad(d.getHours()) + '.' + pad(d.getMinutes()) + '.' + pad(d.getSeconds());
-        },
         renderTagBarcode: function(code) {
             var svg = document.getElementById('ttTagBarcodeSvg');
             if (!svg) return;
@@ -1243,7 +1238,6 @@ var Controllers = {
             var name = document.getElementById('ttName').value.trim() || '-';
             var supplier = document.getElementById('ttSupplier').value.trim();
             var country = document.getElementById('ttCountry').value.trim();
-            var dept = document.getElementById('ttDept').value.trim();
             var ean = document.getElementById('ttEan').value.trim();
             var perUnit = document.getElementById('ttPerUnit').value.trim() || 'Цена за 1кг';
 
@@ -1261,14 +1255,8 @@ var Controllers = {
             document.getElementById('ttTagPerUnitBottom').textContent = perUnit;
             document.getElementById('ttTagSpRub').textContent = rub;
             document.getElementById('ttTagSpKop').textContent = kopStr;
-            document.getElementById('ttTagDept').textContent = dept;
-
-            // Two date stamps: now and now+5 days
-            var now = new Date();
-            var until = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
-            document.getElementById('ttTagDates').innerHTML =
-                '<span>' + this.formatDateStamp(now) + '</span>'
-              + '<span>' + this.formatDateStamp(until) + '</span>';
+            // GoodsID box at the bottom-right mirrors the same code used in the barcode
+            document.getElementById('ttTagDept').textContent = goodsCode;
 
             this.renderTagBarcode(code);
 
