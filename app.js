@@ -1210,15 +1210,17 @@ var Controllers = {
             try {
                 JsBarcode(svg, code, {
                     format: 'CODE128',
-                    height: 46,
+                    height: 40,
                     displayValue: true,
                     fontSize: 11,
-                    margin: 0,
-                    width: 1.4,
-                    background: 'transparent',
-                    lineColor: '#000'
+                    textMargin: 1,
+                    margin: 2,
+                    width: 1.4
                 });
-            } catch (e) { console.error('[Tsennik render]', e); }
+            } catch (e) {
+                console.error('[Tsennik render]', e);
+                try { JsBarcode(svg, code, { format: 'CODE128', height: 40, displayValue: true, width: 1.4 }); } catch (err) {}
+            }
         },
         generate: function() {
             var goodsCode = document.getElementById('ttGoodsCode').value.trim();
